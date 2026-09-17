@@ -564,6 +564,10 @@ SUSANOO_CAST_INVULN = 1.5
 SUSANOO_ARC_RATIO = 0.3
 SUSANOO_THUNDER_COLOR = (176, 132, 255)
 SUSANOO_ARC_COLOR = (214, 178, 255)
+RANGER_MARK_MAX = 3
+RANGER_MARK_DAMAGE_BONUS = 0.08
+RANGER_DASH_SPEED_DURATION = 0.5
+RANGER_DASH_SPEED_BONUS = 0.2
 SEA_SAGE_WAVE_STAGE1_DAMAGE = 20.0
 SEA_SAGE_WAVE_STAGE2_DAMAGE = 30.0
 SEA_SAGE_WAVE_STAGE3_DAMAGE = 60.0
@@ -1180,6 +1184,7 @@ JOB_DEFS.update(
             "attack_damage": 9,
             "attack_range": 280,
             "attack_interval": 0.78,
+            "use_design_attack_speed": True,
             "projectile_speed": 300.0,
             "move_speed": 116.0,
             "skill_id": "chaos_law",
@@ -2017,7 +2022,7 @@ POKEDEX_LOCALIZATION = {
         "name": "混沌魔",
         "mp_charge_style": "每 5 秒随机充能 5% 到 50%",
         "skill_name": "混沌法则",
-        "skill_description": "触发完全随机效果，可能是自疗、秒杀、重击、全屏眩晕，或是释放一轮追踪混沌弹幕。",
+        "skill_description": "触发完全随机效果：回复 25% 最大生命、混沌惩戒(240真实伤害)、180 重击+1.5秒眩晕、全屏震荡 1.5 秒，或是释放一轮 10 发追踪混沌弹幕。",
     },
 }
 
@@ -5718,6 +5723,8 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
             attacker.add_dragon_breath(1)
     if role_num == 103:
         target.design_susanoo_prowl = min(SUSANOO_PROWL_MAX, target.design_susanoo_prowl + SUSANOO_PROWL_APPLY_ON_HIT)
+    if role_num == 59:
+        target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + 1)
     if attacker.design_element_mode == "ice":
         call_target_method(target, "apply_slow", 0.35, 1.5)
     elif attacker.design_element_mode == "fire":
@@ -6411,11 +6418,12 @@ def cast_design_skill(caster, game_state, token=None):
     elif token == "arrow_rain":
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
         direction = direction.normalize()
-        caster.pos -= direction * 60.0
+        caster.pos -= direction * 80.0
         caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
         caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+        caster.design_ranger_speed_timer = max(caster.design_ranger_speed_timer, RANGER_DASH_SPEED_DURATION)
         for offset in (-24, -12, 0, 12, 24):
-            spawn_design_projectile(caster, game_state, direction.rotate(offset), 8.0, "design_physical_ranger", (160, 255, 180), max_range=320.0, pierce=True)
+            spawn_design_projectile(caster, game_state, direction.rotate(offset), 14.0, "design_physical_ranger", (160, 255, 180), max_range=320.0, pierce=True)
     elif token == "stone_skin":
         caster.clear_negative_states()
         caster.heal(80.0)
@@ -6942,6 +6950,8 @@ class Character:
         self.design_aurora_burn_timer = 0.0
         self.design_aurora_burn_source = None
         self.design_susanoo_prowl = 0
+        self.design_ranger_mark = 0
+        self.design_ranger_speed_timer = 0.0
         self.design_dragon_form = "thunder"
         self.design_dragon_breath_thunder = 0
         self.design_dragon_breath_wood = 0
@@ -8358,6 +8368,8 @@ class Character:
                 if arc_candidates:
                     arc_target = min(arc_candidates, key=lambda c: (c.pos - self.pos).length_squared())
                     arc_target.take_damage(damage * SUSANOO_ARC_RATIO, source=source_character, damage_type="design_spell_susanoo_arc", game_state=game_state)
+        if source_character is not None and source_character.design_meta.get("role_num") == 59 and self.design_ranger_mark > 0 and not is_true_damage:
+            damage *= 1.0 + RANGER_MARK_DAMAGE_BONUS * min(RANGER_MARK_MAX, self.design_ranger_mark)
         if self.is_equilibrium_arbiter() and damage > 0:
             if damage_kind == DAMAGE_KIND_PHYSICAL:
                 self.physical_resistance = max(0.0, self.physical_resistance + EQUILIBRIUM_THRESHOLD_RESIST_PHYS_DELTA)
@@ -8575,6 +8587,8 @@ class Character:
             modifier *= 1.0 + DRAGON_AWE_MOVE_SPEED_PER_STACK * self.design_dragon_awe
         if self.job_name == "Assassin" and self.assassin_haste_timer > 0:
             modifier *= 1.3
+        if self.design_ranger_speed_timer > 0:
+            modifier *= 1.0 + RANGER_DASH_SPEED_BONUS
         modifier *= max(0.6, 1.0 + self.design_bonus_speed)
         return modifier
 
@@ -9188,24 +9202,26 @@ class Character:
                 target.apply_slow(0.5, HEX_CURSE_DURATION)
         elif skill_id == "chaos_law":
             roll = random.uniform(0.0, 100.0)
-            if roll < 25.0:
-                self.heal(110.0)
-            elif roll < 26.0:
+            if roll < 20.0:
+                self.heal(self.max_hp * 0.25)
+            elif roll < 25.0:
                 target = select_random_targetable(self, game_state)
                 if target is not None:
-                    target.take_damage(999.0, source=self, damage_type="true_chaos_burst", game_state=game_state)
-            elif roll < 30.0:
-                target = select_random_targetable(self, game_state)
+                    target.take_damage(240.0, source=self, damage_type="true_chaos_burst", game_state=game_state)
+            elif roll < 45.0:
+                target = select_nearest_enemy(self, game_state["characters"])
                 if target is not None:
-                    target.take_damage(100.0, source=self, damage_type="chaos_bolt", game_state=game_state)
-            elif roll < 55.0:
+                    target.take_damage(180.0, source=self, damage_type="chaos_bolt", game_state=game_state)
+                    if hasattr(target, "apply_stun"):
+                        target.apply_stun(1.5)
+            elif roll < 65.0:
                 for target in get_targetables(game_state):
                     if target.alive and target.owner_id != self.owner_id and hasattr(target, "apply_stun"):
-                        target.apply_stun(6.0)
+                        target.apply_stun(1.5)
             else:
                 target = select_nearest_enemy(self, game_state["characters"])
                 if target is not None:
-                    for index in range(8):
+                    for index in range(10):
                         angle_offset = random.uniform(-18.0, 18.0)
                         direction = (target.pos - self.pos)
                         if direction.length_squared() == 0:
@@ -9218,7 +9234,7 @@ class Character:
                                 start,
                                 velocity,
                                 self,
-                                20.0,
+                                22.0,
                                 (218, 120, 255),
                                 source_kind="chaos_law",
                                 homing_strength=5.2,
@@ -9367,7 +9383,7 @@ class Character:
         elif self.config["mp_mode"] == "chaos_random":
             self.chaos_charge_timer -= dt
             if self.chaos_charge_timer <= 0:
-                self.gain_mp(random.uniform(5.0, 50.0), "chaos_random")
+                self.gain_mp(random.uniform(10.0, 25.0), "chaos_random")
                 self.chaos_charge_timer += CHAOS_CHARGE_INTERVAL
         elif self.config["mp_mode"] == "health_sacrifice_timed":
             self.warlock_charge_timer -= dt
@@ -9544,6 +9560,8 @@ class Character:
                     self.apply_blind(AURORA_BURN_DURATION)
         if self.assassin_haste_timer > 0:
             self.assassin_haste_timer = max(0.0, self.assassin_haste_timer - dt)
+        if self.design_ranger_speed_timer > 0:
+            self.design_ranger_speed_timer = max(0.0, self.design_ranger_speed_timer - dt)
         if self.doom_timer > 0:
             self.doom_timer = max(0.0, self.doom_timer - dt)
             self.take_damage(ELECTRO_DOOM_DPS * dt, source=self, damage_type="true_doom", game_state=game_state)
@@ -10594,10 +10612,29 @@ def draw_world(surface, game_state, label_font):
 def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops):
     screen.fill(BACKGROUND_COLOR)
 
+    # 背景装饰：竞技场网格 + 中央圆环光环
+    for gx in range(0, SCREEN_WIDTH, 40):
+        pygame.draw.line(screen, (22, 28, 36), (gx, 0), (gx, SCREEN_HEIGHT), 1)
+    for gy in range(0, SCREEN_HEIGHT, 40):
+        pygame.draw.line(screen, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
+    for rx in range(0, SCREEN_WIDTH, 160):
+        pygame.draw.line(screen, GRID_COLOR, (rx, 0), (rx, SCREEN_HEIGHT), 1)
+    for ry in range(0, SCREEN_HEIGHT, 160):
+        pygame.draw.line(screen, GRID_COLOR, (0, ry), (SCREEN_WIDTH, ry), 1)
+    glow = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    pygame.draw.circle(glow, (58, 92, 168, 30), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 150, 3)
+    pygame.draw.circle(glow, (58, 92, 168, 20), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 192, 2)
+    pygame.draw.circle(glow, (96, 84, 176, 14), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 234, 2)
+    screen.blit(glow, (0, 0))
+
+    # 标题面板（两侧同心圆装饰）
     title_rect = pygame.Rect(144, 58, 512, 92)
     draw_panel(screen, title_rect, (16, 22, 30), accent_color=MENU_ACCENT, radius=18, shadow_offset=(4, 5))
-    title = title_font.render("Auto-Battler Arena", True, TEXT_COLOR)
-    subtitle = subtitle_font.render("Configure the arena before the battle begins", True, (180, 192, 208))
+    for tx in (162, 638):
+        pygame.draw.circle(screen, (110, 170, 255), (tx, 104), 12, 2)
+        pygame.draw.circle(screen, (110, 170, 255), (tx, 104), 6, 2)
+    title = title_font.render("圆环斗场", True, TEXT_COLOR)
+    subtitle = subtitle_font.render("自动对战竞技场 · 百余名角色混战", True, (180, 192, 208))
     screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 92)))
     screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 128)))
 
@@ -10613,7 +10650,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
 
     draw_panel(screen, panel_rect, MENU_PANEL, accent_color=(90, 122, 176), radius=18)
 
-    label = button_font.render(f"Player Count: {player_count}", True, TEXT_COLOR)
+    label = button_font.render(f"参赛人数: {player_count}", True, TEXT_COLOR)
     label_rect = label.get_rect(center=(SCREEN_WIDTH // 2, 238))
     screen.blit(label, label_rect)
 
@@ -10631,29 +10668,39 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
 
     draw_panel(screen, decrement_rect, minus_color, radius=12, shadow_offset=(2, 2))
     draw_panel(screen, increment_rect, plus_color, radius=12, shadow_offset=(2, 2))
-    draw_panel(screen, start_rect, start_color, radius=14, shadow_offset=(3, 4))
+    draw_panel(screen, start_rect, start_color, radius=14, shadow_offset=(3, 4), accent_color=(255, 214, 120))
     draw_panel(screen, pokedex_rect, pokedex_color, radius=12, shadow_offset=(2, 3))
     draw_panel(screen, effects_rect, effects_color, radius=12, shadow_offset=(2, 3))
     draw_panel(screen, win_rate_rect, win_rate_color, radius=12, shadow_offset=(2, 3))
 
+    # 开始按钮 ▶ 图标 + 文案
+    start_text = button_font.render("开始战斗", True, TEXT_COLOR)
+    tri = [(start_rect.left + 24, start_rect.centery - 9), (start_rect.left + 24, start_rect.centery + 9), (start_rect.left + 36, start_rect.centery)]
+    pygame.draw.polygon(screen, (255, 214, 120), tri)
+    screen.blit(start_text, start_text.get_rect(center=(start_rect.centerx + 6, start_rect.centery)))
+
+    # 图鉴 / 效果 / 胜率 按钮：左侧彩色圆点
+    icon_dots = ((pokedex_rect, (110, 170, 255)), (effects_rect, (142, 226, 188)), (win_rate_rect, (255, 214, 120)))
+    for rect, dot_color in icon_dots:
+        pygame.draw.circle(screen, dot_color, (rect.left + 18, rect.centery), 6)
+        pygame.draw.circle(screen, BORDER_COLOR, (rect.left + 18, rect.centery), 6, 1)
+
     minus_text = title_font.render("-", True, TEXT_COLOR)
     plus_text = title_font.render("+", True, TEXT_COLOR)
-    start_text = button_font.render("Start Game", True, TEXT_COLOR)
     pokedex_text = button_font.render(POKEDEX_UI_TEXT["menu_button"], True, TEXT_COLOR)
     effects_text = subtitle_font.render(EFFECT_UI_TEXT["menu_button"], True, TEXT_COLOR)
     win_rate_text = subtitle_font.render("胜率", True, TEXT_COLOR)
     screen.blit(minus_text, minus_text.get_rect(center=decrement_rect.center))
     screen.blit(plus_text, plus_text.get_rect(center=increment_rect.center))
-    screen.blit(start_text, start_text.get_rect(center=start_rect.center))
-    screen.blit(pokedex_text, pokedex_text.get_rect(center=pokedex_rect.center))
-    screen.blit(effects_text, effects_text.get_rect(center=effects_rect.center))
-    screen.blit(win_rate_text, win_rate_text.get_rect(center=win_rate_rect.center))
+    screen.blit(pokedex_text, pokedex_text.get_rect(center=(pokedex_rect.centerx + 8, pokedex_rect.centery)))
+    screen.blit(effects_text, effects_text.get_rect(center=(effects_rect.centerx + 8, effects_rect.centery)))
+    screen.blit(win_rate_text, win_rate_text.get_rect(center=(win_rate_rect.centerx + 8, win_rate_rect.centery)))
 
-    hint = subtitle_font.render(f"Minimum {MIN_CHARACTERS} players, maximum {MAX_CHARACTERS}", True, (150, 164, 180))
+    hint = subtitle_font.render(f"最少 {MIN_CHARACTERS} 人，最多 {MAX_CHARACTERS} 人", True, (150, 164, 180))
     screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 430)))
 
     row_color = TEXT_COLOR if hover_name == "weapon_drops" else (180, 192, 208)
-    row_text = subtitle_font.render("Disable Timed Weapon Drops", True, row_color)
+    row_text = subtitle_font.render("关闭定时武器掉落", True, row_color)
     screen.blit(row_text, (weapon_drops_rect.left + 30, weapon_drops_rect.top - 1))
 
     checkbox_fill = MENU_BUTTON_HOVER if hover_name == "weapon_drops" else MENU_BUTTON
@@ -10664,6 +10711,10 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     if disable_timed_weapon_drops:
         pygame.draw.line(screen, TEXT_COLOR, (weapon_checkbox_rect.left + 4, weapon_checkbox_rect.centery), (weapon_checkbox_rect.centerx - 1, weapon_checkbox_rect.bottom - 5), 2)
         pygame.draw.line(screen, TEXT_COLOR, (weapon_checkbox_rect.centerx - 1, weapon_checkbox_rect.bottom - 5), (weapon_checkbox_rect.right - 4, weapon_checkbox_rect.top + 4), 2)
+
+    # 底部信息条
+    version_text = subtitle_font.render(f"已收录 {len(JOB_DEFS)} 名角色 · 圆环斗场 v0.9 · Enter 开始战斗", True, (150, 164, 180))
+    screen.blit(version_text, version_text.get_rect(midbottom=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 10)))
 
     return {
         "minus": decrement_rect,
