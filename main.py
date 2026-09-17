@@ -186,6 +186,10 @@ MP_RATE_MEDIUM = 15.0
 MP_RATE_FAST = 20.0
 MP_RATE_VERY_FAST = 30.0
 
+SPAWN_FX_DURATION = 1.5
+SPAWN_FX_RAISE_HEIGHT = 46.0
+SPAWN_FX_GLOW_COLOR = (214, 224, 244)
+
 SLOW_DURATION = 1.8
 SLOW_FACTOR = 0.8
 
@@ -359,11 +363,14 @@ WARLOCK_BEAM_DAMAGE = 80.0
 WARLOCK_BEAM_WIDTH = 22.0
 WARLOCK_BEAM_RANGE = 1200.0
 TINKERER_OVERCLOCK_DURATION = 3.0
-VALKYRIE_DIVE_DURATION = 2.0
+VALKYRIE_DIVE_DURATION = 1.4
 VALKYRIE_TRUE_SHIELD = 500.0
 VALKYRIE_SLAM_RADIUS = 70.0
 VALKYRIE_SLAM_DAMAGE = 80.0
 VALKYRIE_SLAM_STUN = 1.0
+VALKYRIE_RETARGET_RADIUS = 90.0
+VALKYRIE_LANDING_LIFETIME = 0.7
+VALKYRIE_LANDING_COLOR = (255, 214, 96)
 DARK_REFLECT_DURATION = 5.0
 BLOODWRAITH_SHIELD_DURATION = 4.0
 BLOODWRAITH_SHIELD_RATIO = 0.25
@@ -607,9 +614,23 @@ GRAVEKEEPER_MARKER_DURATION = 18.0
 GRAVEKEEPER_NEARBY_CHARGE_RANGE = 140.0
 GRAVEKEEPER_NEARBY_CHARGE_BONUS = 20.0
 GRAVEKEEPER_WRAITH_SPEED = 240.0
-GRAVEKEEPER_WRAITH_DAMAGE = 26.0
+GRAVEKEEPER_WRAITH_DAMAGE = 55.0
 GRAVEKEEPER_WRAITH_SLOW = 0.35
 GRAVEKEEPER_WRAITH_SLOW_DURATION = 1.0
+GRAVEKEEPER_WRAITH_FIELD_BONUS = 40.0
+GRAVEKEEPER_FIELD_TICK_INTERVAL = 0.5
+GRAVEKEEPER_FIELD_BASE_DPS = 12.0
+GRAVEKEEPER_FIELD_STACK_DPS = 6.0
+GRAVEKEEPER_FIELD_MARKER_DPS_MULTIPLIER = 2.0
+GRAVEKEEPER_ROT_MAX = 5
+GRAVEKEEPER_ROT_SLOW_PER_STACK = 0.03
+GRAVEKEEPER_ROT_DURATION = 2.0
+GRAVEKEEPER_ROT_BONUS_DAMAGE = 45.0
+GRAVEKEEPER_GUARD_DAMAGE = 40.0
+GRAVEKEEPER_GUARD_HITS = 3
+GRAVEKEEPER_GUARD_HIT_COOLDOWN = 0.35
+GRAVEKEEPER_MARKER_DRAIN_INTERVAL = 6.0
+GRAVEKEEPER_MARKER_DRAIN_DAMAGE = 30.0
 GRAVEKEEPER_FIELD_COLOR = (124, 94, 72)
 GRAVEKEEPER_FIELD_EDGE_COLOR = (170, 142, 108)
 GRAVEKEEPER_MARKER_COLOR = (92, 92, 96)
@@ -1299,12 +1320,14 @@ JOB_DEFS.update(
             "shape": "triangle_down",
             "color": (255, 208, 54),
             "max_hp": 1000,
-            "mp_mode": "distance_moved",
-            "mp_rate": 0.0,
+            "mp_mode": "damage_taken_scaled",
+            "mp_rate": 1.2,
             "attack_type": "melee",
-            "attack_damage": 11,
+            "attack_damage": 50,
             "attack_range": 48,
             "attack_interval": 0.74,
+            "use_design_attack_speed": True,
+            "use_design_attack_damage": True,
             "projectile_speed": 300.0,
             "move_speed": 148.0,
             "skill_id": "skyfall_strike",
@@ -1806,9 +1829,9 @@ CHARACTER_DATA.update(
             "move_speed": JOB_DEFS["Valkyrie"]["move_speed"],
             "attack_type": JOB_DEFS["Valkyrie"]["attack_type"],
             "attack_range": JOB_DEFS["Valkyrie"]["attack_range"],
-            "mp_charge_style": "Charge from movement distance",
+            "mp_charge_style": "Charge from damage taken",
             "skill_name": "Skyfall Strike",
-            "skill_description": "Flies upward invulnerably, gains a 500-point true shield, then crashes into the densest enemy cluster for heavy area damage and a short stun.",
+            "skill_description": "Flies upward invulnerably, gains a 500-point true shield, retargets the densest enemy cluster on landing, then crashes down with a golden pillar shockwave and a short stun.",
         },
         "Dark Knight": {
             "name": "Dark Knight",
@@ -2086,9 +2109,9 @@ POKEDEX_LOCALIZATION.update(
         },
         "Valkyrie": {
             "name": "女武神",
-            "mp_charge_style": "按移动距离充能",
+            "mp_charge_style": "受到伤害时充能",
             "skill_name": "天降重击",
-            "skill_description": "升空并获得无敌与 500 点真实护盾，随后砸向敌人最密集的区域，造成范围伤害并施加短暂眩晕。",
+            "skill_description": "升空并获得无敌与 500 点真实护盾，随后砸向敌人最密集的区域，造成范围伤害并施加短暂眩晕。落地前会重新追踪最密集的敌人，落地时掀起金色光柱冲击。",
         },
         "Dark Knight": {
             "name": "黑暗骑士",
@@ -4172,6 +4195,7 @@ class Projectile:
         explosion_radius=0.0,
         explosion_damage=None,
         explosion_damage_type=None,
+        explosion_mp_per_hit=0.0,
         charm_duration=0.0,
         visual_shape="circle",
         on_hit=None,
@@ -4195,6 +4219,7 @@ class Projectile:
         self.explosion_radius = explosion_radius
         self.explosion_damage = damage if explosion_damage is None else explosion_damage
         self.explosion_damage_type = explosion_damage_type or source_kind
+        self.explosion_mp_per_hit = explosion_mp_per_hit
         self.charm_duration = charm_duration
         self.visual_shape = visual_shape
         self.on_hit = on_hit
@@ -4215,7 +4240,7 @@ class Projectile:
             return
         self.alive = False
         if self.explosion_radius > 0:
-            apply_aoe_damage(
+            hits = apply_aoe_damage(
                 self.pos,
                 self.explosion_radius,
                 self.explosion_damage,
@@ -4224,6 +4249,8 @@ class Projectile:
                 source=self.owner,
                 damage_type=self.explosion_damage_type,
             )
+            if self.explosion_mp_per_hit > 0 and hits > 0 and isinstance(self.owner, Character) and self.owner.alive:
+                self.owner.gain_mp(hits * self.explosion_mp_per_hit, "mortar_blast")
 
     def find_homing_target(self, game_state):
         if self.homing_target_id is None:
@@ -4866,7 +4893,7 @@ class DesignEffect:
                     self.owner_id,
                     game_state,
                     source=self.owner,
-                    damage_type="design_spell_meteor",
+                    damage_type=self.data.get("damage_type", "design_spell_meteor"),
                 )
                 self.alive = False
         elif self.effect_type == "soul_chain":
@@ -4886,6 +4913,9 @@ class DesignEffect:
                 self.pos = pygame.Vector2(target.pos)
                 self.radius = getattr(target, "radius", CHARACTER_RADIUS) + 10.0
         elif self.effect_type == "equilibrium_pulse":
+            if self.lifetime <= 0:
+                self.alive = False
+        elif self.effect_type == "valkyrie_landing":
             if self.lifetime <= 0:
                 self.alive = False
         elif self.effect_type == "swamp":
@@ -5073,14 +5103,54 @@ class DesignEffect:
                 lambda target: (target.pos - self.pos).length() <= self.radius + getattr(target, "radius", 0),
                 lambda target: target.apply_slow(slow_amount, 0.25) if hasattr(target, "apply_slow") else None,
             )
+            erosion_accum = self.data.get("erosion_accum", 0.0) + dt
+            if erosion_accum >= GRAVEKEEPER_FIELD_TICK_INTERVAL:
+                self.data["erosion_accum"] = 0.0
+                stacks = int(self.data.get("grave_stacks", 0))
+                tick_dps = GRAVEKEEPER_FIELD_BASE_DPS + stacks * GRAVEKEEPER_FIELD_STACK_DPS
+                if marker_present:
+                    tick_dps *= GRAVEKEEPER_FIELD_MARKER_DPS_MULTIPLIER
+                self.affect_targets(
+                    game_state,
+                    lambda target: (target.pos - self.pos).length() <= self.radius + getattr(target, "radius", 0),
+                    lambda target: target.take_damage(
+                        tick_dps * GRAVEKEEPER_FIELD_TICK_INTERVAL,
+                        source=self.owner,
+                        damage_type="design_spell_grave_erosion",
+                        game_state=game_state,
+                    ),
+                )
+            else:
+                self.data["erosion_accum"] = erosion_accum
             if self.data.get("grave_detonate", False) or self.lifetime <= 0:
                 if self.owner is not None and hasattr(self.owner, "resolve_gravekeeper_field"):
                     self.owner.resolve_gravekeeper_field(self, game_state)
                 else:
                     self.alive = False
         elif self.effect_type == "grave_marker":
-            pass
+            drain_timer = self.data.get("drain_timer", 0.0) + dt
+            if drain_timer >= GRAVEKEEPER_MARKER_DRAIN_INTERVAL:
+                self.data["drain_timer"] = 0.0
+                nearest = None
+                nearest_distance = None
+                for candidate in get_targetables(game_state):
+                    if not candidate.alive or candidate.owner_id == self.owner_id:
+                        continue
+                    distance = (candidate.pos - self.pos).length()
+                    if nearest is None or distance < nearest_distance:
+                        nearest = candidate
+                        nearest_distance = distance
+                if nearest is not None:
+                    nearest.take_damage(
+                        GRAVEKEEPER_MARKER_DRAIN_DAMAGE,
+                        source=self.owner,
+                        damage_type="design_spell_grave_drain",
+                        game_state=game_state,
+                    )
+            else:
+                self.data["drain_timer"] = drain_timer
         elif self.effect_type == "grave_wraith":
+            max_hits = int(self.data.get("max_hits", 1))
             target = None
             target_distance = None
             for candidate in get_targetables(game_state):
@@ -5099,15 +5169,35 @@ class DesignEffect:
             self.pos += self.direction * self.data.get("speed", GRAVEKEEPER_WRAITH_SPEED) * dt
             if target is not None:
                 if (target.pos - self.pos).length() <= self.radius + getattr(target, "radius", 0):
-                    target.take_damage(
-                        self.data.get("damage", GRAVEKEEPER_WRAITH_DAMAGE),
-                        source=self.owner,
-                        damage_type="design_spell_grave_wraith",
-                        game_state=game_state,
-                    )
-                    if hasattr(target, "apply_slow"):
-                        target.apply_slow(self.data.get("slow", GRAVEKEEPER_WRAITH_SLOW), self.data.get("slow_duration", GRAVEKEEPER_WRAITH_SLOW_DURATION))
-                    self.alive = False
+                    hits_done = int(self.data.get("hits_done", 0))
+                    target_id = id(target)
+                    if self.hit_counts.get(target_id, 0.0) <= 0:
+                        target.take_damage(
+                            self.data.get("damage", GRAVEKEEPER_WRAITH_DAMAGE),
+                            source=self.owner,
+                            damage_type="design_spell_grave_wraith",
+                            game_state=game_state,
+                        )
+                        if hasattr(target, "apply_slow"):
+                            target.apply_slow(self.data.get("slow", GRAVEKEEPER_WRAITH_SLOW), self.data.get("slow_duration", GRAVEKEEPER_WRAITH_SLOW_DURATION))
+                        field_px = self.data.get("field_px")
+                        if field_px is not None:
+                            field_center = pygame.Vector2(float(field_px), float(self.data.get("field_py", 0.0)))
+                            if (target.pos - field_center).length() <= float(self.data.get("field_r", 0.0)) + getattr(target, "radius", 0):
+                                target.take_damage(
+                                    GRAVEKEEPER_WRAITH_FIELD_BONUS,
+                                    source=self.owner,
+                                    damage_type="true_grave_wraith",
+                                    game_state=game_state,
+                                )
+                        hits_done += 1
+                        self.data["hits_done"] = hits_done
+                        self.hit_counts[target_id] = GRAVEKEEPER_GUARD_HIT_COOLDOWN if max_hits > 1 else 0.0
+                        if hits_done >= max_hits:
+                            self.alive = False
+            if self.hit_counts:
+                for hit_id in list(self.hit_counts):
+                    self.hit_counts[hit_id] = max(0.0, self.hit_counts[hit_id] - dt)
             if not point_inside_arena(self.pos, self.radius + 4):
                 self.alive = False
 
@@ -5212,6 +5302,36 @@ class DesignEffect:
             center = (round(self.pos.x), round(self.pos.y))
             pygame.draw.circle(overlay, (*EQUILIBRIUM_PULSE_COLOR, max(36, alpha)), center, ring_radius, 3)
             pygame.draw.circle(overlay, (*EQUILIBRIUM_MARK_GLOW, max(24, alpha // 2)), center, max(2, ring_radius - 6), 1)
+        elif self.effect_type == "valkyrie_landing":
+            progress = clamp(1.0 - self.lifetime / max(0.1, VALKYRIE_LANDING_LIFETIME), 0.0, 1.0)
+            alpha = int(230 * (1.0 - progress))
+            center = (round(self.pos.x), round(self.pos.y))
+            # 落地冲击环：向外扩散
+            ring_radius = round(8.0 + progress * (self.radius * 1.25))
+            pygame.draw.circle(overlay, (*VALKYRIE_LANDING_COLOR, max(30, alpha)), center, ring_radius, 4)
+            pygame.draw.circle(overlay, (255, 250, 224, max(20, alpha // 3)), center, max(3, ring_radius - 6), 2)
+            # 上升光柱：从地面冲向天空
+            column_height = round(46.0 + (1.0 - progress) * 34.0)
+            column_alpha = max(28, alpha)
+            glow_rect = pygame.Rect(center[0] - 7, center[1] - column_height, 14, column_height)
+            pygame.draw.rect(overlay, (*VALKYRIE_LANDING_COLOR, column_alpha), glow_rect, border_radius=5)
+            pygame.draw.rect(overlay, (255, 252, 230, max(18, column_alpha - 40)), glow_rect.inflate(6, 8), border_radius=7)
+            # 光柱顶部尖刺
+            tip_y = center[1] - column_height
+            pygame.draw.polygon(
+                overlay,
+                (*VALKYRIE_LANDING_COLOR, column_alpha),
+                [(center[0] - 10, tip_y), (center[0] + 10, tip_y), (center[0], tip_y - 16)],
+            )
+            # 地面散落火花
+            for index in range(8):
+                angle = math.tau * index / 8 + progress * 0.6
+                spark_radius = round(14.0 + progress * (self.radius * 1.15))
+                spark_pos = (
+                    round(center[0] + math.cos(angle) * spark_radius),
+                    round(center[1] + math.sin(angle) * spark_radius * 0.35),
+                )
+                pygame.draw.circle(overlay, (*VALKYRIE_LANDING_COLOR, max(16, alpha // 2)), spark_pos, 2)
         elif self.effect_type == "meteor":
             pygame.draw.circle(overlay, (255, 180, 110, 70), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (255, 220, 160, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -5248,13 +5368,19 @@ class DesignEffect:
             pygame.draw.rect(overlay, (*GRAVEKEEPER_MARKER_COLOR, alpha), top, border_radius=2)
             pygame.draw.line(overlay, (126, 126, 132, min(255, alpha + 20)), (body.left + 3, body.centery - 2), (body.right - 4, body.centery + 4), 1)
             pygame.draw.line(overlay, (74, 74, 78, min(255, alpha + 20)), (body.left + 4, body.top + 5), (body.right - 3, body.bottom - 6), 1)
+            drain_progress = float(self.data.get("drain_timer", 0.0)) / GRAVEKEEPER_MARKER_DRAIN_INTERVAL
+            if self.data.get("drain_timer", 0.0) > 0 or drain_progress > 0:
+                pulse_alpha = int(30 + 26 * math.sin(self.timer * 7.0))
+                pygame.draw.circle(overlay, (150, 214, 170, pulse_alpha), center, round(self.radius * (1.55 + 0.25 * drain_progress)), 2)
         elif self.effect_type == "grave_wraith":
+            is_guard = int(self.data.get("max_hits", 1)) > 1
             alpha = 90 + max(0, int(90 * clamp(self.lifetime / max(0.1, self.data.get("lifetime", 1.0)), 0.0, 1.0)))
             center = (round(self.pos.x), round(self.pos.y))
             direction = self.direction if self.direction.length_squared() > 0 else pygame.Vector2(1, 0)
             trail_start = (round(self.pos.x - direction.x * self.radius * 1.6), round(self.pos.y - direction.y * self.radius * 1.6))
             pygame.draw.line(overlay, (*GRAVEKEEPER_WRAITH_TRAIL_COLOR, 120), trail_start, center, max(2, round(self.radius * 0.55)))
-            pygame.draw.circle(overlay, (*GRAVEKEEPER_WRAITH_COLOR, alpha), center, round(self.radius))
+            body_color = GRAVEKEEPER_WRAITH_COLOR if not is_guard else (168, 226, 178)
+            pygame.draw.circle(overlay, (*body_color, alpha), center, round(self.radius))
             pygame.draw.polygon(
                 overlay,
                 (*GRAVEKEEPER_WRAITH_TRAIL_COLOR, min(255, alpha + 25)),
@@ -5265,6 +5391,8 @@ class DesignEffect:
                     (center[0] - self.radius, center[1]),
                 ],
             )
+            if is_guard:
+                pygame.draw.circle(overlay, (150, 226, 166, min(255, alpha + 10)), center, round(self.radius + 3), 2)
         elif self.effect_type == "mirror_void":
             pygame.draw.circle(overlay, (92, 88, 104, 82), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (176, 168, 184, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -5592,6 +5720,10 @@ def spawn_design_projectile(
     slow_duration=0.0,
     visual_shape="circle",
     on_hit=None,
+    explosion_radius=0.0,
+    explosion_damage=None,
+    explosion_damage_type=None,
+    explosion_mp_per_hit=0.0,
 ):
     if direction.length_squared() == 0:
         direction = random_unit_vector()
@@ -5612,6 +5744,10 @@ def spawn_design_projectile(
             slow_duration=slow_duration,
             visual_shape=visual_shape,
             on_hit=on_hit,
+            explosion_radius=explosion_radius,
+            explosion_damage=explosion_damage,
+            explosion_damage_type=explosion_damage_type or damage_type,
+            explosion_mp_per_hit=explosion_mp_per_hit,
             spell_trail=damage_type.startswith("design_spell_"),
         )
     )
@@ -5690,6 +5826,20 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
         call_target_method(target, "add_poison_progress", 1.0)
     if role_num == 62 and random.random() < 0.1:
         call_target_method(target, "apply_cold", 1)
+    if role_num == 52:
+        current_rot = getattr(target, "gravekeeper_rot_stacks", 0)
+        if current_rot >= GRAVEKEEPER_ROT_MAX:
+            target.take_damage(
+                GRAVEKEEPER_ROT_BONUS_DAMAGE,
+                source=attacker,
+                damage_type="true_gravekeeper_rot",
+                game_state=game_state,
+            )
+            target.gravekeeper_rot_stacks = 0
+            target.gravekeeper_rot_timer = 0.0
+        else:
+            target.gravekeeper_rot_stacks = current_rot + 1
+            target.gravekeeper_rot_timer = GRAVEKEEPER_ROT_DURATION
     if role_num == 64 and random.random() < 0.01:
         call_target_method(target, "apply_sleep", 5.0)
     if role_num == 78 and random.random() < 0.2:
@@ -6050,6 +6200,21 @@ def fire_design_basic_attack(attacker, target, game_state):
                     dealt = victim.take_damage(damage, source=attacker, damage_type="design_spell_astral_beam", game_state=game_state)
                     if dealt > 0:
                         apply_design_hit_effects(attacker, victim, game_state, False)
+        elif role_num == 55:
+            blast_radius = attacker.config.get("attack_aoe_radius", 20.0)
+            spawn_design_projectile(
+                attacker,
+                game_state,
+                direction,
+                damage,
+                attacker.get_design_damage_type("mortar_blast"),
+                speed=max(attacker.config.get("projectile_speed", 310.0), 360.0),
+                max_range=attacker.get_current_attack_range(),
+                explosion_radius=blast_radius,
+                explosion_damage=damage,
+                explosion_damage_type="design_physical_mortar_blast",
+                explosion_mp_per_hit=2.0,
+            )
         else:
             total_shots = repeats + (2 if role_num == 79 and random.random() < 0.2 else 0)
             for shot_index in range(total_shots):
@@ -6440,8 +6605,29 @@ def cast_design_skill(caster, game_state, token=None):
             caster.heal(20.0)
     elif token == "mortar_barrage":
         caster.apply_root(3.0)
-        for _ in range(15):
-            add_design_effect(game_state, DesignEffect("meteor", caster, random_spawn_point(ARENA_RECT, 30.0), radius=24.0, lifetime=random.uniform(0.2, 0.8), damage=40.0))
+        total_shells = 15
+        for index in range(total_shells):
+            aim = select_nearest_enemy(caster, game_state["characters"])
+            if aim is not None and aim.alive:
+                spread_angle = random.uniform(0.0, math.tau)
+                spread_radius = random.uniform(0.0, 35.0)
+                shell_anchor = pygame.Vector2(aim.pos) + pygame.Vector2(
+                    math.cos(spread_angle), math.sin(spread_angle)
+                ) * spread_radius
+            else:
+                shell_anchor = random_spawn_point(ARENA_RECT, 30.0)
+            add_design_effect(
+                game_state,
+                DesignEffect(
+                    "meteor",
+                    caster,
+                    shell_anchor,
+                    radius=26.0,
+                    lifetime=0.4 + index * 0.18,
+                    damage=40.0,
+                    damage_type="design_physical_mortar_shell",
+                ),
+            )
     elif token == "fate_link":
         if len(enemies) >= 2:
             a, b = random.sample(enemies, 2)
@@ -6906,6 +7092,7 @@ class Character:
         self.stationary_timer = 0.0
         self.position_lock = pygame.Vector2(self.pos)
         self.design_misc_timer = 0.0
+        self.spawn_fx_timer = SPAWN_FX_DURATION
         self.design_secondary_timer = 0.0
         self.design_tertiary_timer = 0.0
         self.design_passive_timer = 0.0
@@ -6990,6 +7177,8 @@ class Character:
         self.design_shell_hit_counter = 0
         self.design_shell_guard_cooldown = 0.0
         self.design_shell_counter_timer = 0.0
+        self.gravekeeper_rot_stacks = 0
+        self.gravekeeper_rot_timer = 0.0
         self.design_xuan_bulwark_timer = 0.0
         self.design_xuan_bulwark_shield = 0.0
         self.design_xuan_bulwark_broken_triggered = False
@@ -7241,11 +7430,10 @@ class Character:
         stacks = int(field.data.get("grave_stacks", 0))
         field.data["grave_resolved"] = True
         field.alive = False
-        if stacks <= 0:
-            return
+        wraith_count = max(1, stacks)
         center = pygame.Vector2(field.pos)
-        for index in range(stacks):
-            angle = math.tau * index / max(1, stacks) + random.uniform(-0.35, 0.35)
+        for index in range(wraith_count):
+            angle = math.tau * index / max(1, wraith_count) + random.uniform(-0.35, 0.35)
             offset = pygame.Vector2(math.cos(angle), math.sin(angle)) * random.uniform(10.0, max(16.0, field.radius * 0.35))
             add_design_effect(
                 game_state,
@@ -7260,6 +7448,9 @@ class Character:
                     damage=GRAVEKEEPER_WRAITH_DAMAGE,
                     slow=GRAVEKEEPER_WRAITH_SLOW,
                     slow_duration=GRAVEKEEPER_WRAITH_SLOW_DURATION,
+                    field_px=center.x,
+                    field_py=center.y,
+                    field_r=field.radius,
                 ),
             )
 
@@ -7288,6 +7479,26 @@ class Character:
                 grave_detonate=False,
             ),
         )
+        if markers:
+            add_design_effect(
+                game_state,
+                DesignEffect(
+                    "grave_wraith",
+                    self,
+                    pygame.Vector2(anchor),
+                    radius=12.0,
+                    lifetime=2.6,
+                    direction=random_unit_vector(),
+                    speed=GRAVEKEEPER_WRAITH_SPEED,
+                    damage=GRAVEKEEPER_GUARD_DAMAGE,
+                    slow=GRAVEKEEPER_WRAITH_SLOW,
+                    slow_duration=GRAVEKEEPER_WRAITH_SLOW_DURATION,
+                    max_hits=GRAVEKEEPER_GUARD_HITS,
+                    field_px=anchor.x,
+                    field_py=anchor.y,
+                    field_r=GRAVEKEEPER_FIELD_RADIUS,
+                ),
+            )
 
     def get_design_damage_kind(self):
         if self.is_dragon():
@@ -8653,6 +8864,8 @@ class Character:
             modifier *= 1.3
         if self.design_ranger_speed_timer > 0:
             modifier *= 1.0 + RANGER_DASH_SPEED_BONUS
+        if self.gravekeeper_rot_stacks > 0:
+            modifier *= 1.0 - GRAVEKEEPER_ROT_SLOW_PER_STACK * min(GRAVEKEEPER_ROT_MAX, self.gravekeeper_rot_stacks)
         modifier *= max(0.6, 1.0 + self.design_bonus_speed)
         return modifier
 
@@ -9535,6 +9748,10 @@ class Character:
             self.design_mark_duration = max(0.0, self.design_mark_duration - dt)
             if self.design_mark_duration == 0:
                 self.design_marked = False
+        if self.gravekeeper_rot_timer > 0:
+            self.gravekeeper_rot_timer = max(0.0, self.gravekeeper_rot_timer - dt)
+            if self.gravekeeper_rot_timer == 0:
+                self.gravekeeper_rot_stacks = 0
         if self.design_link_timer > 0:
             self.design_link_timer = max(0.0, self.design_link_timer - dt)
             if self.design_link_timer == 0:
@@ -9888,9 +10105,33 @@ class Character:
         if self.valkyrie_dive_timer > 0:
             self.valkyrie_dive_timer = max(0.0, self.valkyrie_dive_timer - dt)
             if self.valkyrie_dive_timer == 0 and self.valkyrie_dive_target is not None:
+                current_enemies = [enemy for enemy in get_targetables(game_state) if enemy.alive and enemy.owner_id != self.owner_id]
+                if current_enemies:
+                    fresh_anchor = max(
+                        current_enemies,
+                        key=lambda enemy: (
+                            sum(1 for other in current_enemies if (other.pos - enemy.pos).length() <= VALKYRIE_SLAM_RADIUS),
+                            -sum((other.pos - enemy.pos).length() for other in current_enemies),
+                        ),
+                    )
+                    if (fresh_anchor.pos - self.valkyrie_dive_target).length() > VALKYRIE_RETARGET_RADIUS:
+                        self.valkyrie_dive_target = pygame.Vector2(fresh_anchor.pos)
                 self.pos = pygame.Vector2(self.valkyrie_dive_target)
                 self.pos.x = clamp(self.pos.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
                 self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
+                if game_state is not None:
+                    add_design_effect(
+                        game_state,
+                        DesignEffect(
+                            "valkyrie_landing",
+                            self,
+                            pygame.Vector2(self.pos),
+                            radius=VALKYRIE_SLAM_RADIUS,
+                            lifetime=VALKYRIE_LANDING_LIFETIME,
+                        ),
+                    )
+                    for _ in range(14):
+                        game_state["death_particles"].append(DeathParticle(self.pos, VALKYRIE_LANDING_COLOR, dust=True))
                 self.add_true_shield(VALKYRIE_TRUE_SHIELD)
                 for target in get_targetables(game_state):
                     if not target.alive or target.owner_id == self.owner_id:
@@ -10005,6 +10246,8 @@ class Character:
     def update(self, dt, game_state):
         if not self.alive:
             return
+
+        self.spawn_fx_timer = max(0.0, self.spawn_fx_timer - dt)
 
         self.process_effects(dt, game_state)
         if not self.alive:
@@ -10236,6 +10479,47 @@ class Character:
         draw_color = (255, 72, 72) if self.hit_flash_timer > 0 else self.get_visual_color()
         draw_shape_icon(surface, self.shape, draw_color, (round(center.x), round(center.y)), self.radius - 2)
 
+    def draw_spawn_fx(self, surface):
+        if self.spawn_fx_timer <= 0:
+            return
+        progress = 1.0 - self.spawn_fx_timer / max(0.1, SPAWN_FX_DURATION)
+        center_x = round(self.pos.x)
+        center_y = round(self.pos.y)
+        local_radius = max(8, int(self.radius))
+        # 局部叠加层，避免全屏 SRCALPHA 开销
+        extents = local_radius * 3 + 24
+        overlay = pygame.Surface((extents, extents), pygame.SRCALPHA)
+        cx = extents // 2
+        cy = extents // 2
+        # 光柱：角色颜色垂直光带，随登场进度收缩
+        pillar_half = max(3, int(local_radius * 0.55 * (1.0 - progress * 0.45)))
+        pillar_height = int(extents * 0.72 * (1.15 - progress * 0.35))
+        pillar_alpha = int(120 * (1.0 - progress))
+        if pillar_alpha > 0:
+            pillar_rect = pygame.Rect(cx - pillar_half, cy - local_radius - pillar_height, pillar_half * 2, pillar_height + local_radius * 2)
+            pygame.draw.rect(overlay, (*self.get_visual_color(), min(255, pillar_alpha)), pillar_rect, border_radius=pillar_half)
+            pygame.draw.rect(overlay, (*SPAWN_FX_GLOW_COLOR, max(30, pillar_alpha // 2)), pillar_rect.inflate(pillar_half, 6), border_radius=pillar_half + 4)
+        # 扩散光环：从角色底部向四周扩散并淡出
+        ring_radius = int(local_radius * (0.6 + progress * 1.6))
+        ring_alpha = int(180 * (1.0 - progress))
+        if ring_alpha > 0:
+            pygame.draw.circle(overlay, (*self.get_visual_color(), max(28, ring_alpha)), (cx, cy), max(4, ring_radius), 3)
+            pygame.draw.circle(overlay, (*SPAWN_FX_GLOW_COLOR, max(16, ring_alpha // 2)), (cx, cy), max(3, ring_radius - 4), 1)
+        # 顶部星芒：登场初期向上扬起的闪光颗粒
+        if progress < 0.65:
+            spark_alpha = int(200 * (1.0 - progress / 0.65))
+            spark_count = 6
+            for index in range(spark_count):
+                angle = math.tau * index / spark_count
+                start_r = local_radius * 0.5
+                end_r = local_radius * (0.75 + progress * 1.4)
+                sx = cx + math.cos(angle) * start_r
+                sy = cy + math.sin(angle) * start_r * 0.85
+                ex = cx + math.cos(angle) * end_r
+                ey = cy + math.sin(angle) * end_r * 0.85 - (progress * 14.0)
+                pygame.draw.line(overlay, (*SPAWN_FX_GLOW_COLOR, max(24, spark_alpha)), (round(sx), round(sy)), (round(ex), round(ey)), 2)
+        surface.blit(overlay, (center_x - extents // 2, center_y - extents // 2))
+
     def draw_bars(self, surface, label_font):
         if self.is_twin_mirror():
             bar_width = 34
@@ -10428,6 +10712,7 @@ class Character:
     def draw(self, surface, label_font):
         if not self.alive:
             return
+        self.draw_spawn_fx(surface)
         self.draw_shape(surface)
         self.draw_bars(surface, label_font)
         self.draw_skill_fx(surface)

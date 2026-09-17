@@ -138,7 +138,7 @@ ROLE_CONFIG_OVERRIDES = {
     52: {"skill_token": "grave_swamp", "mp_mode": "death_count", "mp_rate": 40.0, "radius_scale": 1.12},
     53: {"skill_token": "eagle_eye", "mp_mode": "stationary", "mp_rate": 25.0, "attack_range": 420.0},
     54: {"skill_token": "joker_box", "mp_mode": "passive", "mp_rate": 5.0},
-    55: {"skill_token": "mortar_barrage", "attack_aoe_radius": 20.0, "mp_mode": "damage_dealt_scaled", "mp_rate": 0.5},
+    55: {"skill_token": "mortar_barrage", "attack_aoe_radius": 20.0, "attack_damage": 40.0, "mp_mode": "damage_dealt_scaled", "mp_rate": 0.5},
     56: {"skill_token": "fate_link", "basic_damage_kind": "spell", "basic_beam_interval": 0.5, "attack_range": 280.0, "mp_mode": "passive", "mp_rate": 8.0},
     57: {"skill_token": "dice_roll", "attack_random_values": [5, 20, 50, 100], "mp_mode": "attack_count", "mp_rate": 20.0},
     58: {"skill_token": "black_hole", "basic_damage_kind": "true", "mp_mode": "passive", "mp_rate": 12.0},
