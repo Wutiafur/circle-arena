@@ -10248,6 +10248,12 @@ class Character:
             return
 
         self.spawn_fx_timer = max(0.0, self.spawn_fx_timer - dt)
+        if self.spawn_fx_timer > 0 and game_state is not None and game_state.get("elapsed_time", 0.0) <= SPAWN_FX_DURATION:
+            # 开场登场演出：角色定格站立，仅播放登场特效
+            self.vel *= 0.0
+            self.recent_move_dir = pygame.Vector2(0, 0)
+            self.update_rect()
+            return
 
         self.process_effects(dt, game_state)
         if not self.alive:
