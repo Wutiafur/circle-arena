@@ -568,6 +568,14 @@ RANGER_MARK_MAX = 3
 RANGER_MARK_DAMAGE_BONUS = 0.08
 RANGER_DASH_SPEED_DURATION = 0.5
 RANGER_DASH_SPEED_BONUS = 0.2
+SHADOW_VALUE_MAX = 3
+SHADOW_WALTZ_THROW_RATIO = 1.5
+SHADOW_WALTZ_AOE_RADIUS = 60.0
+SHADOW_WALTZ_AOE_DAMAGE_RATIO = 2.0
+SHADOW_WALTZ_INVULN = 1.0
+ELEMENTALIST_RESONANCE_MAX = 3
+IRONCLAD_THORN_RATIO = 0.2
+IRONCLAD_IDLE_REGEN_RATIO = 0.01
 SEA_SAGE_WAVE_STAGE1_DAMAGE = 20.0
 SEA_SAGE_WAVE_STAGE2_DAMAGE = 30.0
 SEA_SAGE_WAVE_STAGE3_DAMAGE = 60.0
@@ -5725,12 +5733,34 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
         target.design_susanoo_prowl = min(SUSANOO_PROWL_MAX, target.design_susanoo_prowl + SUSANOO_PROWL_APPLY_ON_HIT)
     if role_num == 59:
         target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + 1)
+    if role_num == 77:
+        attacker.design_shadow_stacks = min(SHADOW_VALUE_MAX, attacker.design_shadow_stacks + 1)
+        call_target_method(target, "apply_slow", 0.2, 1.0)
+    if role_num == 69 and random.random() < 0.2:
+        call_target_method(target, "apply_stun", 0.3)
     if attacker.design_element_mode == "ice":
-        call_target_method(target, "apply_slow", 0.35, 1.5)
+        call_target_method(target, "apply_slow", 0.5, 2.0)
     elif attacker.design_element_mode == "fire":
-        target.mage_burn_timer = max(getattr(target, "mage_burn_timer", 0.0), 1.5)
+        target.mage_burn_timer = max(getattr(target, "mage_burn_timer", 0.0), 2.5)
     elif attacker.design_element_mode == "electric":
-        call_target_method(target, "apply_knockback", target.pos - attacker.pos, 18.0)
+        call_target_method(target, "apply_knockback", target.pos - attacker.pos, 30.0)
+    if role_num == 50 and attacker.design_element_mode:
+        elem = attacker.design_element_mode
+        prev = getattr(target, "design_last_element", None)
+        if prev == elem:
+            target.design_element_stacks = min(ELEMENTALIST_RESONANCE_MAX, getattr(target, "design_element_stacks", 0) + 1)
+        else:
+            target.design_element_stacks = 1
+        target.design_last_element = elem
+        if target.design_element_stacks >= ELEMENTALIST_RESONANCE_MAX:
+            target.design_element_stacks = 0
+            if elem == "ice":
+                call_target_method(target, "apply_freeze", 1.0)
+            elif elem == "fire":
+                target.take_damage(22.0, source=attacker, damage_type="design_spell_elemental_ignite", game_state=game_state)
+                target.mage_burn_timer = max(getattr(target, "mage_burn_timer", 0.0), 3.0)
+            else:
+                call_target_method(target, "apply_stun", 0.8)
     if role_num == 71 and is_melee:
         spawn_design_projectile(attacker, game_state, target.pos - attacker.pos, 3.0, "design_spell_spellblade_orb", (214, 168, 255), speed=280.0, max_range=160.0)
 
@@ -6034,8 +6064,8 @@ def fire_design_basic_attack(attacker, target, game_state):
                     attacker.get_design_damage_type("basic"),
                     max_range=1200.0 if role_num == 53 and attacker.design_sentinel_lock else attacker.get_current_attack_range(),
                     pierce=role_num == 59,
-                    slow_amount=0.3 if attacker.design_element_mode == "ice" else 0.0,
-                    slow_duration=1.5 if attacker.design_element_mode == "ice" else 0.0,
+                    slow_amount=0.5 if attacker.design_element_mode == "ice" else 0.0,
+                    slow_duration=2.0 if attacker.design_element_mode == "ice" else 0.0,
                 )
         attacker.design_sentinel_lock = False
     attacker.attack_cooldown = attacker.get_basic_attack_cooldown()
@@ -6380,6 +6410,19 @@ def cast_design_skill(caster, game_state, token=None):
             if (enemy.pos - caster.pos).length() <= 60.0 + enemy.radius:
                 enemy.take_damage(25.0, source=caster, damage_type="design_spell_soul_purge", game_state=game_state)
     elif token == "element_switch":
+        current_mode = caster.design_element_mode
+        impact_target = select_nearest_enemy(caster, game_state["characters"])
+        if impact_target is not None and current_mode is not None:
+            if current_mode == "ice":
+                impact_target.take_damage(35.0, source=caster, damage_type="design_spell_elemental_ice_burst", game_state=game_state)
+                impact_target.apply_slow(0.5, 2.0)
+            elif current_mode == "fire":
+                impact_target.take_damage(45.0, source=caster, damage_type="design_spell_elemental_fire_burst", game_state=game_state)
+                impact_target.mage_burn_timer = max(getattr(impact_target, "mage_burn_timer", 0.0), 2.5)
+            else:
+                impact_target.take_damage(30.0, source=caster, damage_type="design_spell_elemental_bolt_burst", game_state=game_state)
+                impact_target.apply_knockback(impact_target.pos - caster.pos, 35.0)
+                impact_target.apply_stun(0.3)
         caster.design_element_mode = random.choice(("ice", "fire", "electric"))
     elif token == "mimic":
         copied = game_state.get("last_design_skill_token")
@@ -6525,13 +6568,27 @@ def cast_design_skill(caster, game_state, token=None):
         if target is not None:
             for _ in range(orb_count):
                 spawn_design_projectile(caster, game_state, target.pos - caster.pos, 10.0, "design_physical_sword", (240, 244, 252), speed=320.0, max_range=320.0)
-    elif token == "shadow_step":
-        target = select_farthest_enemy(caster, game_state["characters"])
-        if target is not None:
-            direction = (target.pos - caster.pos).normalize() if (target.pos - caster.pos).length_squared() > 0 else random_unit_vector()
-            caster.pos = target.pos - direction * (target.radius + caster.radius + 2)
-            caster.design_crit_multiplier = 2.0
+    elif token == "shadow_waltz":
+        if caster.design_shadow_blade_pos is not None:
+            blade = caster.design_shadow_blade_pos
+            caster.design_shadow_blade_pos = None
+            caster.pos = pygame.Vector2(blade)
+            caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+            caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
             caster.update_rect()
+            caster.design_untargetable_timer = max(caster.design_untargetable_timer, SHADOW_WALTZ_INVULN)
+            for enemy in enemies:
+                if (enemy.pos - caster.pos).length() <= SHADOW_WALTZ_AOE_RADIUS + getattr(enemy, "radius", 0):
+                    enemy.take_damage(caster.get_current_basic_damage() * SHADOW_WALTZ_AOE_DAMAGE_RATIO, source=caster, damage_type="design_physical_shadow_waltz", game_state=game_state)
+            spawn_attack_impact(game_state, caster.pos, (150, 150, 170), radius=24, thickness=3, burst_count=14)
+        else:
+            target = select_nearest_enemy(caster, game_state["characters"])
+            if target is not None:
+                blade_pos = pygame.Vector2(target.pos)
+                caster.design_shadow_blade_pos = blade_pos
+                game_state["beam_events"].append(BeamEvent(caster.pos, blade_pos, (170, 170, 190)))
+                spawn_attack_impact(game_state, blade_pos, (170, 170, 190), radius=10, thickness=2, burst_count=6)
+                target.take_damage(caster.get_current_basic_damage() * SHADOW_WALTZ_THROW_RATIO, source=caster, damage_type="design_physical_shadow_throw", game_state=game_state)
     elif token == "hell_charge":
         attack_range = caster.get_current_attack_range()
         burn_targets = []
@@ -6952,6 +7009,10 @@ class Character:
         self.design_susanoo_prowl = 0
         self.design_ranger_mark = 0
         self.design_ranger_speed_timer = 0.0
+        self.design_shadow_stacks = 0
+        self.design_shadow_blade_pos = None
+        self.design_element_stacks = 0
+        self.design_last_element = None
         self.design_dragon_form = "thunder"
         self.design_dragon_breath_thunder = 0
         self.design_dragon_breath_wood = 0
@@ -7287,9 +7348,9 @@ class Character:
         if self.job_name == "DesignRole66_blood_mage":
             missing_ratio = clamp((self.max_hp - self.hp) / max(1.0, self.max_hp - 100.0), 0.0, 1.0)
             damage *= 1.0 + 1.2 * missing_ratio
-        if self.job_name == "DesignRole77_shadow_dancer" and self.design_shadow_idle >= 5.0:
+        if self.job_name == "DesignRole77_shadow_dancer" and self.design_shadow_stacks >= SHADOW_VALUE_MAX:
             damage *= 1.5
-            self.design_shadow_idle = 0.0
+            self.design_shadow_stacks = 0
         if self.job_name == "DesignRole85_sword_spirit":
             if any(
                 other.alive and other.owner_id == self.owner_id and other is not self and other.get_current_basic_attack_type() == "melee"
@@ -8425,6 +8486,9 @@ class Character:
             self.handle_twin_mirror_lethal()
         self.design_recently_hit = 0.0
         self.design_recent_damage_taken += damage
+        if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
+            if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
+                source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
         self.hit_flash_timer = max(self.hit_flash_timer, HIT_FLASH_DURATION)
         if game_state is not None:
             game_state["damage_texts"].append(
@@ -9399,6 +9463,8 @@ class Character:
         self.design_recently_hit += dt
         self.design_shadow_idle += dt
         self.design_recent_damage_taken = 0.0
+        if self.job_name == "DesignRole69_ironclad" and self.design_recently_hit >= 5.0:
+            self.heal(self.max_hp * IRONCLAD_IDLE_REGEN_RATIO * dt)
         if self.is_twin_mirror():
             self.design_misc_timer += dt
         if self.illusion_mirror_timer > 0:
