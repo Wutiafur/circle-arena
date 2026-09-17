@@ -1,0 +1,29 @@
+Circle Crash Report
+Time: 2026-08-31T20:05:52
+Python: 3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:48:34) [MSC v.1929 64 bit (AMD64)]
+Pygame: 2.6.1
+Executable: D:\miniconda\pythonw.exe
+Working Directory: C:\Users\76009\Desktop\circle
+Game File: C:\Users\76009\Desktop\circle\main.py
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\Users\76009\Desktop\circle\main.py", line 8228, in <module>
+    main()
+  File "C:\Users\76009\Desktop\circle\main.py", line 8217, in main
+    result = battle_loop(screen, clock, title_font, small_font, button_font, player_count)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 8131, in battle_loop
+    character.update(dt, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 7092, in update
+    self.fire_basic_attack(target, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 5973, in fire_basic_attack
+    fire_design_basic_attack(self, target, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 4461, in fire_design_basic_attack
+    apply_design_hit_effects(attacker, target, game_state, True)
+  File "C:\Users\76009\Desktop\circle\main.py", line 4271, in apply_design_hit_effects
+    target.mage_burn_timer = max(target.mage_burn_timer, 2.0)
+                                 ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 4054, in __getattr__
+    raise AttributeError(name)
+AttributeError: mage_burn_timer

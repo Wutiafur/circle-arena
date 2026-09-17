@@ -1,0 +1,30 @@
+Circle Crash Report
+Time: 2026-09-02T16:28:45
+Python: 3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:48:34) [MSC v.1929 64 bit (AMD64)]
+Pygame: 2.6.1
+Executable: D:\miniconda\pythonw.exe
+Working Directory: C:\Users\76009\Desktop\circle
+Game File: C:\Users\76009\Desktop\circle\main.py
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\Users\76009\Desktop\circle\main.py", line 9039, in <module>
+    main()
+  File "C:\Users\76009\Desktop\circle\main.py", line 9028, in main
+    result = battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 8940, in battle_loop
+    character.update(dt, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 7746, in update
+    self.process_effects(dt, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 7740, in process_effects
+    self.cast_skill(game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 6894, in cast_skill
+    if cast_design_skill(self, game_state):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 5292, in cast_design_skill
+    enemy.apply_bleed(1)
+    ^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 4480, in __getattr__
+    raise AttributeError(name)
+AttributeError: apply_bleed. Did you mean: 'apply_slow'?
