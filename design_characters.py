@@ -179,6 +179,7 @@ ROLE_CONFIG_OVERRIDES = {
     100: {"skill_token": "xuanwu_bulwark", "attack_interval": 0.6},
     101: {"skill_token": "tiger_roar", "mp_mode": "death_count", "mp_rate": 50.0, "attack_interval": 1.8},
     102: {"skill_token": "dragon_sweep", "mp_mode": "death_count", "mp_rate": 25.0, "attack_interval": 1.0},
+    103: {"skill_token": "susanoo_ominous_raijin", "basic_damage_kind": "spell"},
 }
 
 

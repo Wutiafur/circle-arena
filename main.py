@@ -553,6 +553,17 @@ DRAGON_CHARGE_SWITCH = 10.0
 DRAGON_CHARGE_ROAR = 10.0
 DRAGON_THUNDER_COLOR = (244, 200, 72)
 DRAGON_WOOD_COLOR = (92, 214, 120)
+SUSANOO_JOB_NAME = "DesignRole103_susanoo"
+SUSANOO_PROWL_MAX = 5
+SUSANOO_PROWL_BONUS_PER_STACK = 0.04
+SUSANOO_PROWL_APPLY_ON_HIT = 2
+SUSANOO_RAIJIN_BOLTS = 5
+SUSANOO_BOLT_DAMAGE = 30.0
+SUSANOO_PROWL_EXPLODE_DAMAGE = 15.0
+SUSANOO_CAST_INVULN = 1.5
+SUSANOO_ARC_RATIO = 0.3
+SUSANOO_THUNDER_COLOR = (176, 132, 255)
+SUSANOO_ARC_COLOR = (214, 178, 255)
 SEA_SAGE_WAVE_STAGE1_DAMAGE = 20.0
 SEA_SAGE_WAVE_STAGE2_DAMAGE = 30.0
 SEA_SAGE_WAVE_STAGE3_DAMAGE = 60.0
@@ -2174,7 +2185,7 @@ PHANTOM_LANCER_JOB_NAME = "DesignRole91_phantom_lancer"
 JOB_DEFS[PHANTOM_LANCER_JOB_NAME] = {
     "shape": "slim_diamond",
     "color": (86, 224, 232),
-    "max_hp": 850.0,
+    "max_hp": 900.0,
     "mp_mode": "distance_scaled",
     "mp_rate": 1.0,
     "attack_type": "melee",
@@ -2193,7 +2204,7 @@ CHARACTER_DATA[PHANTOM_LANCER_JOB_NAME] = {
     "name": "Phantom Lancer",
     "shape": "slim_diamond",
     "color": (86, 224, 232),
-    "max_hp": 850.0,
+    "max_hp": 900.0,
     "move_speed": 160.0,
     "attack_type": "melee",
     "attack_range": 46.0,
@@ -4101,6 +4112,14 @@ class WeaponOrb:
 
     def draw(self, surface, font):
         center = (round(self.pos.x), round(self.pos.y))
+        if self.weapon_id == "ColdSpear":
+            # 冷锋枪：发光枪尖 + 长矛杆，带青色光晕
+            pygame.draw.circle(surface, mix_color(self.color, (255, 255, 255), 0.5), center, int(self.radius * 1.6), 2)
+            pygame.draw.circle(surface, self.color, center, self.radius + 2)
+            pygame.draw.line(surface, (240, 248, 255), (center[0] - 3, center[1] - 2), (center[0] + 1, center[1] + 9), 3)
+            pygame.draw.polygon(surface, (120, 232, 246), [(center[0] - 4, center[1] - 3), (center[0] + 3, center[1] - 2), (center[0] - 1, center[1] - 11)])
+            pygame.draw.line(surface, (200, 240, 255), (center[0] - 8, center[1] + 8), (center[0] + 6, center[1] - 4), 1)
+            return
         pygame.draw.circle(surface, self.color, center, self.radius)
         pygame.draw.circle(surface, BORDER_COLOR, center, self.radius, 2)
         label = font.render(self.weapon_def["label"], True, (18, 22, 28))
@@ -5697,6 +5716,8 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
         attacker.design_dragon_hit_count += 1
         if attacker.design_dragon_hit_count % DRAGON_BREATH_HIT_INTERVAL == 0:
             attacker.add_dragon_breath(1)
+    if role_num == 103:
+        target.design_susanoo_prowl = min(SUSANOO_PROWL_MAX, target.design_susanoo_prowl + SUSANOO_PROWL_APPLY_ON_HIT)
     if attacker.design_element_mode == "ice":
         call_target_method(target, "apply_slow", 0.35, 1.5)
     elif attacker.design_element_mode == "fire":
@@ -6308,6 +6329,25 @@ def cast_design_skill(caster, game_state, token=None):
             caster.update_rect()
             caster.design_dragon_sweep_cooldown = DRAGON_SWEEP_COOLDOWN
             caster.dragon_switch(game_state, breath_before)
+    elif token == "susanoo_ominous_raijin":
+        living = [enemy for enemy in enemies if enemy.alive]
+        if living:
+            prey = max(living, key=lambda e: (e.design_susanoo_prowl, -((e.pos - caster.pos).length_squared())))
+            caster.design_untargetable_timer = max(caster.design_untargetable_timer, SUSANOO_CAST_INVULN)
+            prowl_before = prey.design_susanoo_prowl
+            for _ in range(SUSANOO_RAIJIN_BOLTS):
+                if not prey.alive:
+                    break
+                game_state["beam_events"].append(BeamEvent(prey.pos + pygame.Vector2(0, -120), prey.pos, SUSANOO_THUNDER_COLOR))
+                prey.take_damage(SUSANOO_BOLT_DAMAGE, source=caster, damage_type="design_spell_susanoo_bolt", game_state=game_state)
+            for _ in range(prowl_before):
+                if not prey.alive:
+                    break
+                game_state["beam_events"].append(BeamEvent(prey.pos + pygame.Vector2(0, -90), prey.pos, SUSANOO_ARC_COLOR))
+                prey.take_damage(SUSANOO_PROWL_EXPLODE_DAMAGE, source=caster, damage_type="design_spell_susanoo_explode", game_state=game_state)
+            prep_pos = pygame.Vector2(prey.pos)
+            prey.design_susanoo_prowl = 0
+            spawn_attack_impact(game_state, prep_pos, SUSANOO_THUNDER_COLOR, radius=18, thickness=3, burst_count=12)
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)
@@ -6315,13 +6355,14 @@ def cast_design_skill(caster, game_state, token=None):
             offset = target.pos - caster.pos
             if offset.length_squared() > 0:
                 direction = offset.normalize()
-                target.take_damage(15.0, source=caster, damage_type="design_physical_spear_throw", game_state=game_state)
+                target.take_damage(caster.get_current_basic_damage() * 2.0, source=caster, damage_type="design_physical_spear_throw", game_state=game_state)
         if direction.length_squared() == 0:
             direction = pygame.Vector2(1, 0)
         landing_pos = caster.pos + direction * 120.0
         landing_pos.x = clamp(landing_pos.x, ARENA_RECT.left + 12, ARENA_RECT.right - 12)
         landing_pos.y = clamp(landing_pos.y, ARENA_RECT.top + 12, ARENA_RECT.bottom - 12)
         game_state["beam_events"].append(BeamEvent(caster.pos, landing_pos, (86, 224, 232)))
+        spawn_attack_impact(game_state, landing_pos, (86, 224, 232), radius=10, thickness=2, burst_count=6)
         if game_state.get("timed_weapon_orb_drops_enabled", True):
             game_state["weapon_orbs"].append(WeaponOrb("ColdSpear", landing_pos, lifetime=PHANTOM_LANCER_SPEAR_LIFETIME))
         caster.phantom_lancer_throw_speed_timer = PHANTOM_LANCER_THROW_SPEED_DURATION
@@ -6900,6 +6941,7 @@ class Character:
         self.design_aurora_burn = 0
         self.design_aurora_burn_timer = 0.0
         self.design_aurora_burn_source = None
+        self.design_susanoo_prowl = 0
         self.design_dragon_form = "thunder"
         self.design_dragon_breath_thunder = 0
         self.design_dragon_breath_wood = 0
@@ -7246,7 +7288,7 @@ class Character:
                 damage *= 1.2
         if self.job_name == "DesignRole91_phantom_lancer":
             speed_ratio = (self.move_speed * self.get_speed_modifier()) / 100.0
-            damage += max(0.0, speed_ratio - 1.0) * 30.0
+            damage += max(0.0, speed_ratio - 1.0) * 45.0
         if self.is_phoenix():
             damage += (self.design_phoenix_feather // PHOENIX_FEATHER_PER_BONUS) * PHOENIX_FEATHER_DAMAGE_BONUS
         if self.is_tiger() and random.random() < TIGER_CRIT_CHANCE:
@@ -7567,6 +7609,9 @@ class Character:
 
     def is_dragon(self):
         return self.job_name == DRAGON_JOB_NAME
+
+    def is_susanoo(self):
+        return self.job_name == SUSANOO_JOB_NAME
 
     def get_dragon_breath(self, form=None):
         form = form or self.design_dragon_form
@@ -8302,6 +8347,17 @@ class Character:
         if self.job_name == "DesignRole83_aurora" and not is_true_damage:
             if not any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "dash", "bash")):
                 damage *= DESIGN_AURORA_RESIST
+        if source_character is not None and source_character.is_susanoo() and "susanoo" in str(damage_type) and not is_true_damage:
+            if self.design_susanoo_prowl > 0:
+                damage *= 1.0 + SUSANOO_PROWL_BONUS_PER_STACK * min(SUSANOO_PROWL_MAX, self.design_susanoo_prowl)
+            if "arc" not in str(damage_type):
+                arc_candidates = [
+                    c for c in (game_state["characters"] if game_state is not None else [])
+                    if c.alive and c is not self and getattr(c, "owner_id", None) != source_character.owner_id
+                ]
+                if arc_candidates:
+                    arc_target = min(arc_candidates, key=lambda c: (c.pos - self.pos).length_squared())
+                    arc_target.take_damage(damage * SUSANOO_ARC_RATIO, source=source_character, damage_type="design_spell_susanoo_arc", game_state=game_state)
         if self.is_equilibrium_arbiter() and damage > 0:
             if damage_kind == DAMAGE_KIND_PHYSICAL:
                 self.physical_resistance = max(0.0, self.physical_resistance + EQUILIBRIUM_THRESHOLD_RESIST_PHYS_DELTA)
@@ -8718,6 +8774,7 @@ class Character:
             self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
             self.update_rect()
             game_state["melee_effects"].append(MeleeSwingEffect(start_pos, self.pos + direction * (target.radius + 10), self.get_visual_color()))
+            game_state["beam_events"].append(BeamEvent(start_pos, self.pos, (86, 224, 232)))
             damage = self.get_current_basic_damage() * 2.0 * self.get_target_attack_bonus(target)
             dealt = target.take_damage(
                 damage,
@@ -8726,10 +8783,11 @@ class Character:
                 game_state=game_state,
             )
             if dealt > 0:
+                spawn_attack_impact(game_state, target.pos, (86, 224, 232), radius=12, thickness=2, burst_count=6)
                 self.heal(40.0)
                 self.phantom_lancer_throw_speed_timer = PHANTOM_LANCER_THROW_SPEED_DURATION
                 self.phantom_lancer_spear_hunt_timer = max(self.phantom_lancer_spear_hunt_timer, PHANTOM_LANCER_SPEAR_HUNT_DURATION)
-                if random.random() < 0.25:
+                if random.random() < 0.5:
                     cast_design_skill(self, game_state, "phantom_lancer_throw")
         elif self.held_weapon["weapon_id"] == "Staff":
             targets = [candidate for candidate in get_targetables(game_state) if candidate.owner_id != self.owner_id]
@@ -10217,6 +10275,8 @@ class Character:
                 dot_y = round(self.pos.y - self.radius) - 14
                 for i in range(breath):
                     pygame.draw.circle(surface, form_color, (round(self.pos.x - 14 + i * 7), dot_y), 3)
+        if self.is_susanoo():
+            pygame.draw.circle(surface, SUSANOO_THUNDER_COLOR, center, round(self.radius + 8), 2)
         if self.is_sunfire_blademaster():
             pygame.draw.circle(surface, self.get_visual_color(), center, round(self.radius + 8), 2)
         if self.is_sea_sage() and (self.sea_tide_shield_hp > 0 or self.sea_tide_reduction_timers):
