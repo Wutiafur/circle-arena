@@ -1,0 +1,27 @@
+Circle Crash Report
+Time: 2026-09-12T00:10:24
+Python: 3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:48:34) [MSC v.1929 64 bit (AMD64)]
+Pygame: 2.6.1
+Executable: D:\miniconda\pythonw.exe
+Working Directory: C:\Users\76009\Desktop\circle
+Game File: C:\Users\76009\Desktop\circle\main.py
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\Users\76009\Desktop\circle\main.py", line 10601, in <module>
+    main()
+  File "C:\Users\76009\Desktop\circle\main.py", line 10590, in main
+    result = battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 10491, in battle_loop
+    character.update(dt, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 9259, in update
+    self.fire_basic_attack(target, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 7962, in fire_basic_attack
+    fire_design_basic_attack(self, target, game_state)
+  File "C:\Users\76009\Desktop\circle\main.py", line 5797, in fire_design_basic_attack
+    attacker.on_attack_committed()
+  File "C:\Users\76009\Desktop\circle\main.py", line 7375, in on_attack_committed
+    self.design_xp_timer += dt
+                            ^^
+NameError: name 'dt' is not defined

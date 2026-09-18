@@ -1,0 +1,27 @@
+Circle Crash Report
+Time: 2026-09-02T17:21:27
+Python: 3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:48:34) [MSC v.1929 64 bit (AMD64)]
+Pygame: 2.6.1
+Executable: D:\miniconda\pythonw.exe
+Working Directory: C:\Users\76009\Desktop\circle
+Game File: C:\Users\76009\Desktop\circle\main.py
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\Users\76009\Desktop\circle\main.py", line 9046, in <module>
+  File "C:\Users\76009\Desktop\circle\main.py", line 9035, in main
+    continue
+         ^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 8947, in battle_loop
+    game_state["elapsed_time"] += dt
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 7878, in update
+    can_fire = self.attack_cooldown <= 0 and self.sniper_charge_timer <= 0 and self.charm_timer <= 0 and self.disarm_timer <= 0 and self.blind_timer <= 0
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 6719, in fire_basic_attack
+    return WEAPON_DEFS[self.held_weapon["weapon_id"]]["range"]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\circle\main.py", line 4891, in fire_design_basic_attack
+    direction = target.pos - attacker.pos
+                  ^^^^^^^^^
+UnboundLocalError: cannot access local variable 'direction' where it is not associated with a value

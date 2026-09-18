@@ -102,6 +102,10 @@ CHASE_NOISE_RETARGET_INTERVAL = (0.16, 0.34)
 CHASE_NOISE_LERP = 6.0
 
 
+_LIVE_GAME_STATE = None
+_LIVE_SPEED_MULTIPLIER = 1.0
+
+
 def save_crash_report(exc_type, exc_value, exc_traceback):
     BUG_REPORT_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -116,11 +120,44 @@ def save_crash_report(exc_type, exc_value, exc_traceback):
         f"Working Directory: {Path.cwd()}",
         f"Game File: {Path(__file__).resolve()}",
         "",
-        "Traceback:",
-        traceback_text,
+        "Settings:",
+        json.dumps(GAME_SETTINGS, ensure_ascii=False, indent=2),
+        "",
     ]
+    snapshot_text = build_crash_snapshot_text()
+    if snapshot_text:
+        report_lines.append("Last Battle Snapshot:")
+        report_lines.append(snapshot_text)
+        report_lines.append("")
+    report_lines.append("Traceback:")
+    report_lines.append(traceback_text)
     report_path.write_text("\n".join(report_lines), encoding="utf-8")
     return report_path
+
+
+def build_crash_snapshot_text():
+    game_state = _LIVE_GAME_STATE
+    if game_state is None:
+        return ""
+    lines = []
+    try:
+        lines.append(f"elapsed_time: {game_state.get('elapsed_time', 0.0):.2f} s")
+        lines.append(f"speed_multiplier: {_LIVE_SPEED_MULTIPLIER:g}")
+        lines.append(f"pause: {bool(game_state.get('_pause_flag', False))}")
+        characters = game_state.get("characters", [])
+        alive = [c for c in characters if getattr(c, "alive", False)]
+        lines.append(f"total_characters: {len(characters)}  alive: {len(alive)}")
+        lines.append(f"projectiles: {len(game_state.get('projectiles', []))}  design_effects: {len(game_state.get('design_effects', []))}")
+        lines.append(f"weapon_orbs: {len(game_state.get('weapon_orbs', []))}  kill_banners: {len(game_state.get('kill_banners', []))}")
+        for c in alive[:24]:
+            lines.append(
+                f"  {c.job_name:28s} hp={c.hp:8.1f}/{c.max_hp:8.1f} mp={c.mp:6.1f} pos=({c.pos.x:7.2f},{c.pos.y:7.2f}) damageDealt={c.damageDealt:.0f} damageTaken={c.damageTaken:.0f}"
+            )
+        if len(alive) > 24:
+            lines.append(f"  ... and {len(alive) - 24} more")
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
 def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
@@ -174,6 +211,38 @@ def record_win_rate_result(game_state):
     if winner is not None and getattr(winner, "job_name", None) in stats:
         stats[winner.job_name]["wins"] += 1
     save_win_rate_stats(stats)
+
+
+def _settings_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+
+def load_settings():
+    default = {
+        "volume": 70,
+        "effects_quality": "high",
+        "skip_entrance": False,
+        "fullscreen": False,
+    }
+    try:
+        with open(_settings_path(), "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        for key, value in default.items():
+            data.setdefault(key, value)
+        return data
+    except (OSError, ValueError, TypeError):
+        return dict(default)
+
+
+def save_settings(settings):
+    try:
+        with open(_settings_path(), "w", encoding="utf-8") as handle:
+            json.dump(settings, handle, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+
+GAME_SETTINGS = load_settings()
 
 PROJECTILE_RADIUS = 4
 PROJECTILE_LIFETIME = 3.0
@@ -571,6 +640,93 @@ SUSANOO_CAST_INVULN = 1.5
 SUSANOO_ARC_RATIO = 0.3
 SUSANOO_THUNDER_COLOR = (176, 132, 255)
 SUSANOO_ARC_COLOR = (214, 178, 255)
+# 104 幽灵祭司
+GHOST_PRIEST_JOB = "DesignRole104_ghost_priest"
+GHOST_DREAD_MAX = 5
+GHOST_DREAD_DURATION = 6.0
+GHOST_DREAD_SLOW_PER_STACK = 0.04
+GHOST_DREAD_DAMAGE_BONUS_PER_STACK = 0.08
+GHOST_WHISPER_INTERVAL = 5.0
+GHOST_WHISPER_DAMAGE = 25.0
+GHOST_WHISPER_FEAR = 0.5
+GHOST_BARAGE_RADIUS = 55.0
+GHOST_BARAGE_BASE = 50.0
+GHOST_BARAGE_PER_STACK = 10.0
+GHOST_BARAGE_FEAR = 1.2
+GHOST_FEAR_DISTANCE = 90.0
+GHOST_FEAR_TEAL = (112, 214, 214)
+# 105 炎舞姬
+FLAME_DANCER_JOB = "DesignRole105_flame_dancer"
+FLAME_EMBER_MAX = 4
+FLAME_EMBER_DURATION = 3.0
+FLAME_EMBER_DPS = 4.0
+FLAME_EMBER_BURST_DAMAGE = 30.0
+FLAME_DANCER_HASTE_DURATION = 3.0
+FLAME_DANCER_HASTE_BONUS = 0.2
+FLAME_WHEEL_RADIUS = 48.0
+FLAME_WHEEL_DAMAGE = 55.0
+FLAME_WHEEL_KNOCKBACK = 30.0
+FLAME_WHEEL_CIRCLE_DPS = 12.0
+FLAME_WHEEL_REMAIN = 2.5
+# 106 深渊观测者
+ABYSSAL_WATCHER_JOB = "DesignRole106_abyssal_watcher"
+GAZE_MAX = 5
+GAZE_DURATION = 8.0
+GAZE_TRUE_BONUS_PER_STACK = 0.06
+GAZE_MOVE_BONUS_PER_STACK = 0.03
+GAZE_KILL_HEAL_RATIO = 0.08
+ABYSS_CHARGE_TIME = 0.8
+ABYSS_RAY_BASE = 80.0
+ABYSS_RAY_PER_STACK = 15.0
+ABYSS_RAY_STUN = 1.0
+ABYSS_RAY_MP_REFUND = 0.3
+ABYSS_EYE_COLOR = (126, 172, 96)
+# 107 夺心者
+MIND_THIEF_JOB = "DesignRole107_mind_thief"
+STOLEN_MARK_MAX = 5
+STOLEN_STEAL_RATIO = 0.03
+STOLEN_STEAL_DURATION = 2.0
+STOLEN_PASSIVE_DAMAGE_BONUS_PER_STACK = 0.03
+STOLEN_CRIT_REDUCTION = 0.5
+MIND_STEAL_LIFESTEAL_RATIO = 0.2
+MIND_STEAL_MAX_STEAL = 150.0
+MIND_STEAL_AOE_BASE = 20.0
+MIND_STEAL_AOE_PER_STACK = 5.0
+MIND_STEAL_AOE_RADIUS = 35.0
+# 108 裂空者
+RIFTBREAKER_JOB = "DesignRole108_riftbreaker"
+RIFT_SLOW = 0.1
+RIFT_DETONATION_RADIUS = 20.0
+RIFT_DETONATION_DAMAGE = 15.0
+RIFT_FIELD_DURATION = 3.0
+RIFT_PHASE_INTERVAL = 6.0
+RIFT_PHASE_DISTANCE = 60.0
+RIFT_PHASE_HASTE = 0.25
+RIFT_DASH_DISTANCE = 140.0
+RIFT_DASH_DAMAGE = 70.0
+RIFT_DASH_KNOCKBACK = 40.0
+RIFT_LINE_DPS = 20.0
+RIFT_LINE_DURATION = 1.5
+RIFT_BLUE = (96, 178, 255)
+# 109 魂缚剑匣
+SOUL_CASKET_JOB = "DesignRole109_soulbound_casket"
+SOUL_BLADE_TRANSFER_RATIO = 0.10
+SOUL_BLADE_MAX_HP_RATIO = 0.60
+SOUL_BLADE_RESPAWN_DELAY = 8.0
+SOUL_BLADE_ORBIT = 34.0
+SOUL_BLADE_DAMAGE = 8.0
+SOUL_BLADE_SPEED = 150.0
+SOUL_BLADE_ATTACK_RANGE = 42.0
+SOUL_BLADE_ATTACK_INTERVAL = 1.1
+SOUL_NINE_SLASH_DAMAGE = 30.0
+SOUL_NINE_SLASH_CRIT_CHANCE = 0.20
+SOUL_NINE_SLASH_CRIT_MULT = 1.8
+SOUL_NINE_SLASH_CRIT_EXTRA = 1
+SOUL_NINE_SLASH_MAX_TOTAL = 12
+SOUL_NINE_SLASH_DELAY = 0.12
+SOUL_SLASH_COLOR = (240, 242, 248)
+SOUL_SLASH_CRIT_COLOR = (255, 208, 54)
+SOUL_BLADE_COLOR = (116, 176, 232)
 RANGER_MARK_MAX = 3
 RANGER_MARK_DAMAGE_BONUS = 0.08
 RANGER_DASH_SPEED_DURATION = 0.5
@@ -671,7 +827,8 @@ DESIGN_ORACLE_LINK_DURATION = 4.0
 DESIGN_ORACLE_LINK_SHARE = 1.0
 DESIGN_RAIN_INTERVAL = 0.2
 DESIGN_RAIN_DAMAGE = 11.0
-DESIGN_WOLF_DURATION = 30.0
+DESIGN_WOLF_DURATION = 20.0
+BEASTMASTER_WOLF_DEATH_CD = 4.0
 DESIGN_DRONE_DURATION = 5.0
 DESIGN_GHOST_SAILOR_DURATION = 8.0
 DESIGN_LARVA_DURATION = 8.0
@@ -3605,6 +3762,9 @@ def build_pokedex_detail_surface(detail_panel, data, subtitle_font, body_font, s
     if win_rows:
         win_title = subtitle_font.render("战绩", True, (120, 210, 160))
         content_surface.blit(win_title, (text_x, y))
+        if stats is not None and job_name in set(get_top_three_jobs(stats, min_matches=3)):
+            badge = subtitle_font.render("🏆 当前前三", True, (255, 208, 54))
+            content_surface.blit(badge, (text_x + 78, y))
         y += 28
         for label, value in win_rows:
             label_surface = subtitle_font.render(f"{label}:", True, TEXT_COLOR)
@@ -4058,6 +4218,45 @@ class DeathParticle:
         else:
             pygame.draw.circle(overlay, (*self.color, alpha), (self.size, self.size), self.size)
         surface.blit(overlay, (round(self.pos.x - self.size), round(self.pos.y - self.size)))
+
+
+class KillBanner:
+    def __init__(self, character, text, color=None):
+        self.character = character
+        self.text = text
+        self.color = color if color is not None else (255, 214, 120)
+        self.lifetime = 2.2
+        self.total_lifetime = 2.2
+        self.alive = True
+        self.pos = pygame.Vector2(character.pos)
+
+    def update(self, dt):
+        self.pos.y -= 22 * dt
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.alive = False
+
+    def draw(self, surface, font):
+        progress = 1.0 - clamp(self.lifetime / self.total_lifetime, 0.0, 1.0)
+        alpha = int(255 * (1.0 - progress)) if progress < 0.15 else int(255 * clamp(self.lifetime / (self.total_lifetime * 0.5), 0.0, 1.0))
+        alpha = max(0, min(255, alpha))
+        text = font.render(self.text, True, self.color)
+        text.set_alpha(alpha)
+        rect = text.get_rect(center=(round(self.pos.x), round(self.pos.y)))
+        panel = rect.inflate(24, 10)
+        overlay = pygame.Surface((panel.width, panel.height), pygame.SRCALPHA)
+        pygame.draw.rect(overlay, (16, 20, 28, int(alpha * 0.66)), overlay.get_rect(), border_radius=9)
+        pygame.draw.rect(overlay, (*self.color, min(255, alpha)), overlay.get_rect(), 2, border_radius=9)
+        surface.blit(overlay, panel.topleft)
+        surface.blit(text, rect)
+
+
+KILLSTREAK_BANNERS = {
+    3: "三连击破！",
+    5: "五连绝杀！",
+    8: "八连屠戮！",
+    12: "十二连神罚！",
+}
 
 
 class SpellTrailParticle:
@@ -4918,6 +5117,102 @@ class DesignEffect:
         elif self.effect_type == "valkyrie_landing":
             if self.lifetime <= 0:
                 self.alive = False
+        elif self.effect_type == "abyss_charge":
+            if self.lifetime <= 0:
+                self._abyss_ray_resolve(game_state)
+        elif self.effect_type == "flame_ring":
+            self.affect_targets(
+                game_state,
+                lambda target: (target.pos - self.pos).length() <= self.radius + getattr(target, "radius", 0),
+                lambda target: target.take_damage(
+                    self.data.get("dps", FLAME_WHEEL_CIRCLE_DPS) * dt,
+                    source=self.owner,
+                    damage_type="design_spell_flame_ring",
+                    game_state=game_state,
+                ),
+            )
+        elif self.effect_type == "rift_line":
+            self.affect_targets(
+                game_state,
+                lambda target: distance_point_to_segment(target.pos, self.pos - self.data.get("direction", pygame.Vector2(0, 0)) * self.data.get("length", 1.0) * 0.5, self.pos + self.data.get("direction", pygame.Vector2(0, 0)) * self.data.get("length", 1.0) * 0.5) <= getattr(target, "radius", 0) + self.radius,
+                lambda target: target.take_damage(
+                    self.data.get("dps", RIFT_LINE_DPS) * dt,
+                    source=self.owner,
+                    damage_type="design_spell_rift_line",
+                    game_state=game_state,
+                ),
+            )
+        elif self.effect_type == "rift_field":
+            self.affect_targets(
+                game_state,
+                lambda target: (target.pos - self.pos).length() <= self.radius + getattr(target, "radius", 0),
+                lambda target: target.apply_slow(RIFT_SLOW, 0.25) if hasattr(target, "apply_slow") else None,
+            )
+            if self.lifetime <= 0:
+                apply_aoe_damage(
+                    self.pos,
+                    RIFT_DETONATION_RADIUS,
+                    RIFT_DETONATION_DAMAGE,
+                    self.owner_id,
+                    game_state,
+                    source=self.owner,
+                    damage_type="design_spell_rift_detonate",
+                )
+                self.alive = False
+        elif self.effect_type == "soul_slash":
+            blade_id = self.data.get("blade_id")
+            blade = None
+            if blade_id is not None:
+                for summoned in game_state.get("design_summons", []):
+                    if summoned.summon_type == "soul_blade" and id(summoned) == blade_id and summoned.alive:
+                        blade = summoned
+                        break
+            if blade is not None:
+                self.pos = pygame.Vector2(blade.pos)
+            else:
+                # 剑灵死亡：斩击中断
+                self.alive = False
+                return
+            if self.lifetime <= 0:
+                strikes_left = int(self.data.get("strikes_left", 9))
+                max_total = int(self.data.get("max_total", SOUL_NINE_SLASH_MAX_TOTAL))
+                total_done = int(self.data.get("total_done", 0))
+                target = None
+                target_id = self.data.get("target_id")
+                for candidate in get_targetables(game_state):
+                    if id(candidate) == target_id and candidate.alive:
+                        target = candidate
+                        break
+                if target is None or not target.alive:
+                    target = select_nearest_enemy(self.owner, game_state["characters"]) if self.owner is not None else None
+                    if target is not None:
+                        self.data["target_id"] = id(target)
+                if target is not None and target.alive and self.owner is not None:
+                    crit = random.random() < SOUL_NINE_SLASH_CRIT_CHANCE
+                    damage = SOUL_NINE_SLASH_DAMAGE * (SOUL_NINE_SLASH_CRIT_MULT if crit else 1.0)
+                    dealt = target.take_damage(damage, source=self.owner, damage_type="design_physical_soul_slash", game_state=game_state)
+                    slash_color = SOUL_SLASH_CRIT_COLOR if crit else SOUL_SLASH_COLOR
+                    attack_origin = pygame.Vector2(self.pos)
+                    game_state["beam_events"].append(BeamEvent(attack_origin, target.pos, slash_color))
+                    spawn_attack_impact(game_state, target.pos, slash_color, radius=12 if not crit else 18, thickness=3, burst_count=10 if not crit else 14)
+                    if dealt <= 0 or not target.alive:
+                        target = select_nearest_enemy(self.owner, game_state["characters"]) if self.owner is not None else None
+                        if target is not None:
+                            self.data["target_id"] = id(target)
+                            self.data["retargeted"] = True
+                    extra_gain = SOUL_NINE_SLASH_CRIT_EXTRA if crit else 0
+                else:
+                    extra_gain = 0
+                total_done += 1
+                self.data["total_done"] = total_done
+                strikes_left = strikes_left - 1 + extra_gain
+                if total_done < max_total:
+                    strikes_left = min(strikes_left, max_total - total_done)
+                self.data["strikes_left"] = strikes_left
+                if strikes_left <= 0 or total_done >= max_total:
+                    self.alive = False
+                else:
+                    self.lifetime = SOUL_NINE_SLASH_DELAY
         elif self.effect_type == "swamp":
             self.affect_targets(
                 game_state,
@@ -5206,6 +5501,24 @@ class DesignEffect:
                 self.collapse_gravity(game_state)
             self.alive = False
 
+    def _abyss_ray_resolve(self, game_state):
+        if self.owner is None:
+            self.alive = False
+            return
+        target = None
+        target_id = self.data.get("target_id")
+        for candidate in get_targetables(game_state):
+            if id(candidate) == target_id and candidate.alive:
+                target = candidate
+                break
+        if target is not None:
+            game_state["beam_events"].append(BeamEvent(self.pos + pygame.Vector2(0, -140), target.pos, ABYSS_EYE_COLOR))
+            target.take_damage(self.data.get("damage", 80.0), source=self.owner, damage_type="true_design_abyss_ray", game_state=game_state)
+            if hasattr(target, "apply_stun"):
+                target.apply_stun(self.data.get("stun", 1.0))
+            spawn_attack_impact(game_state, target.pos, ABYSS_EYE_COLOR, radius=22, thickness=4, burst_count=16)
+        self.alive = False
+
     def _sea_wave_collide(self, game_state, start_pos, end_pos):
         stage = int(self.data.get("stage", 1))
         for target in get_targetables(game_state):
@@ -5332,6 +5645,46 @@ class DesignEffect:
                     round(center[1] + math.sin(angle) * spark_radius * 0.35),
                 )
                 pygame.draw.circle(overlay, (*VALKYRIE_LANDING_COLOR, max(16, alpha // 2)), spark_pos, 2)
+        elif self.effect_type == "abyss_charge":
+            pulse = 0.5 + 0.5 * math.sin(self.timer * 9.0)
+            alpha = int(90 + 90 * pulse)
+            center = (round(self.pos.x), round(self.pos.y))
+            pygame.draw.circle(overlay, (*ABYSS_EYE_COLOR, alpha), center, round(self.radius * (0.6 + 0.4 * pulse)))
+            pygame.draw.circle(overlay, (*ABYSS_EYE_COLOR, min(255, alpha + 40)), center, max(4, round(self.radius * 0.9)), 3)
+            pygame.draw.line(overlay, (*ABYSS_EYE_COLOR, alpha), (center[0] - 18, center[1]), (center[0] - self.radius - 8, center[1]), 2)
+            pygame.draw.line(overlay, (*ABYSS_EYE_COLOR, alpha), (center[0] + 18, center[1]), (center[0] + self.radius + 8, center[1]), 2)
+        elif self.effect_type == "flame_ring":
+            alpha = int(110 * clamp(self.lifetime / max(0.1, self.data.get("lifetime", 1.0)), 0.0, 1.0))
+            center = (round(self.pos.x), round(self.pos.y))
+            pygame.draw.circle(overlay, (232, 86, 52, max(24, alpha)), center, round(self.radius), 5)
+            pygame.draw.circle(overlay, (255, 180, 92, max(18, alpha // 2)), center, max(3, round(self.radius - 4)), 2)
+        elif self.effect_type == "rift_line":
+            alpha = int(130 * clamp(self.lifetime / max(0.1, self.data.get("lifetime", 1.0)), 0.0, 1.0))
+            direction = self.data.get("direction", pygame.Vector2(0, 0))
+            length = float(self.data.get("length", RIFT_DASH_DISTANCE))
+            start_pos = self.pos - direction * length * 0.5
+            end_pos = self.pos + direction * length * 0.5
+            perp = pygame.Vector2(-direction.y, direction.x) * self.radius
+            points = [
+                (round(start_pos.x + perp.x), round(start_pos.y + perp.y)),
+                (round(end_pos.x + perp.x), round(end_pos.y + perp.y)),
+                (round(end_pos.x), round(end_pos.y)),
+                (round(end_pos.x - perp.x), round(end_pos.y - perp.y)),
+                (round(start_pos.x - perp.x), round(start_pos.y - perp.y)),
+            ]
+            pygame.draw.polygon(overlay, (*RIFT_BLUE, max(26, alpha)), points)
+            pygame.draw.line(overlay, (*RIFT_BLUE, min(255, alpha + 30)), (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 4)
+            pygame.draw.line(overlay, (224, 244, 255, max(30, alpha)), (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 2)
+        elif self.effect_type == "rift_field":
+            pulse = 0.5 + 0.5 * math.sin(self.timer * 6.0)
+            alpha = int(70 + 60 * pulse)
+            center = (round(self.pos.x), round(self.pos.y))
+            pygame.draw.circle(overlay, (*RIFT_BLUE, alpha), center, round(self.radius))
+            pygame.draw.circle(overlay, (*RIFT_BLUE, min(255, alpha + 30)), center, max(4, round(self.radius * 0.8)), 2)
+        elif self.effect_type == "soul_slash":
+            pulse = 0.5 + 0.5 * math.sin(self.timer * 24.0)
+            center = (round(self.pos.x), round(self.pos.y))
+            pygame.draw.circle(overlay, (*SOUL_SLASH_COLOR, int(90 + 90 * pulse)), center, round(6 + 6 * pulse))
         elif self.effect_type == "meteor":
             pygame.draw.circle(overlay, (255, 180, 110, 70), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (255, 220, 160, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -5450,12 +5803,13 @@ class DesignSummon:
             self.shape = "diamond"
             self.color = (168, 176, 186)
             self.radius = 10
-            self.hp = 50
-            self.max_hp = 50
-            self.damage = 8
-            self.speed = 155.0
+            self.hp = 35
+            self.max_hp = 35
+            self.damage = 6
+            self.speed = 140.0
             self.lifetime = DESIGN_WOLF_DURATION
             self.attack_type = "melee"
+            self.attack_interval = 1.5
             self.projectile_speed = 0.0
             self.attack_range = 40.0
         elif summon_type == "drone":
@@ -5500,6 +5854,20 @@ class DesignSummon:
             self.attack_range = max(28.0, getattr(source, "base_attack_range", 40.0) * 0.75)
             self.attack_interval = max(0.22, getattr(source, "base_attack_interval", 0.8) * 0.75)
             self.attack_damage_kind = get_damage_kind("basic", source)
+        elif summon_type == "soul_blade":
+            self.shape = "slim_diamond"
+            self.color = SOUL_BLADE_COLOR
+            self.radius = 11
+            self.hp = float(getattr(owner, "max_hp", 1000.0)) * SOUL_BLADE_MAX_HP_RATIO
+            self.max_hp = self.hp
+            self.damage = SOUL_BLADE_DAMAGE
+            self.speed = SOUL_BLADE_SPEED
+            self.lifetime = float("inf")
+            self.attack_type = "melee"
+            self.projectile_speed = 0.0
+            self.attack_range = SOUL_BLADE_ATTACK_RANGE
+            self.attack_interval = SOUL_BLADE_ATTACK_INTERVAL
+            self.attack_damage_kind = DAMAGE_KIND_PHYSICAL
         else:
             self.shape = "square"
             self.color = (156, 162, 86)
@@ -5543,12 +5911,27 @@ class DesignSummon:
     ):
         if not self.alive or amount <= 0:
             return 0.0
+        if self.summon_type == "soul_blade":
+            absorbed = amount * 0.9
+            transferred = amount * SOUL_BLADE_TRANSFER_RATIO
+            if transferred > 0 and self.owner is not None and getattr(self.owner, "alive", False):
+                self.owner.take_damage(transferred, source=source, damage_type="true_soul_blade_link", game_state=game_state)
+            pre_damage_hp = self.hp
+            self.hp -= absorbed
+            if self.hp <= 0:
+                self.hp = 0
+                self.alive = False
+                if self.owner is not None and hasattr(self.owner, "design_soul_blade_timer"):
+                    self.owner.design_soul_blade_timer = SOUL_BLADE_RESPAWN_DELAY
+            return amount
         pre_damage_hp = self.hp
         self.hp -= amount
         handle_equilibrium_thresholds(self, pre_damage_hp, source if hasattr(source, "on_damage_dealt") else getattr(source, "owner", None), game_state, ignore_equilibrium_thresholds=ignore_equilibrium_thresholds)
         if self.hp <= 0:
             self.hp = 0
             self.alive = False
+            if self.summon_type == "wolf" and self.owner is not None and hasattr(self.owner, "design_wolf_cd_timer"):
+                self.owner.design_wolf_cd_timer = max(self.owner.design_wolf_cd_timer, BEASTMASTER_WOLF_DEATH_CD)
         return amount
 
     def apply_slow(self, amount, duration):
@@ -5578,6 +5961,8 @@ class DesignSummon:
         self.lifetime -= dt
         if self.lifetime <= 0:
             self.alive = False
+            if self.summon_type == "wolf" and self.owner is not None and hasattr(self.owner, "design_wolf_cd_timer"):
+                self.owner.design_wolf_cd_timer = max(self.owner.design_wolf_cd_timer, BEASTMASTER_WOLF_DEATH_CD)
             return
         self.attack_cooldown = max(0.0, self.attack_cooldown - dt)
         if self.summon_type == "spirit":
@@ -5634,6 +6019,28 @@ class DesignSummon:
             self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
             self.update_rect()
             return
+        if self.summon_type == "soul_blade":
+            if self.owner is not None and not getattr(self.owner, "alive", False):
+                self.alive = False
+                return
+            target = select_nearest_targetable(self, game_state)
+            if target is None:
+                return
+            offset = target.pos - self.pos
+            distance = offset.length()
+            direction = offset.normalize() if distance > 0 else random_unit_vector()
+            if distance > self.attack_range + target.radius:
+                self.vel = direction * self.speed
+                self.pos += self.vel * dt
+            else:
+                self.vel *= 0.2
+                if self.attack_cooldown <= 0:
+                    target.take_damage(self.damage, source=self.owner, damage_type="design_physical_soul_blade", game_state=game_state)
+                    self.attack_cooldown = self.attack_interval
+            self.pos.x = clamp(self.pos.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
+            self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
+            self.update_rect()
+            return
         target = select_nearest_targetable(self, game_state)
         if target is None:
             return
@@ -5643,8 +6050,11 @@ class DesignSummon:
         if self.attack_type == "melee":
             self.vel = direction * self.speed
             self.pos += self.vel * dt
-            if distance <= self.attack_range + target.radius:
+            if distance <= self.attack_range + target.radius and self.attack_cooldown <= 0:
                 target.take_damage(self.damage, source=self.owner, damage_type="design_physical_summon", game_state=game_state)
+                if self.summon_type == "wolf" and random.random() < 0.25 and hasattr(target, "apply_bleed"):
+                    target.apply_bleed(1)
+                self.attack_cooldown = max(0.1, self.attack_interval)
                 if self.summon_type == "larva":
                     self.alive = False
         else:
@@ -5819,6 +6229,8 @@ def spawn_windstorm_blade_projectile(
 
 
 def apply_design_hit_effects(attacker, target, game_state, is_melee):
+    if not isinstance(target, Character):
+        return
     role_num = attacker.design_meta.get("role_num")
     if role_num == 44 and random.random() < 0.6:
         call_target_method(target, "apply_bleed", 1)
@@ -5842,6 +6254,27 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
             target.gravekeeper_rot_timer = GRAVEKEEPER_ROT_DURATION
     if role_num == 64 and random.random() < 0.01:
         call_target_method(target, "apply_sleep", 5.0)
+    if role_num == 104:
+        call_target_method(target, "apply_dread", 1)
+    if role_num == 105:
+        target.design_ember = min(FLAME_EMBER_MAX, target.design_ember + 1)
+        target.design_ember_timer = FLAME_EMBER_DURATION
+        if target.design_ember >= FLAME_EMBER_MAX:
+            target.take_damage(FLAME_EMBER_BURST_DAMAGE, source=attacker, damage_type="design_spell_flame_ember_burst", game_state=game_state)
+            target.design_ember = 0
+            target.design_ember_timer = 0.0
+            spawn_attack_impact(game_state, target.pos, (232, 86, 52), radius=18, thickness=3, burst_count=12)
+    if role_num == 106:
+        call_target_method(target, "apply_gaze", 1)
+    if role_num == 107:
+        target.design_stolen_marks = min(STOLEN_MARK_MAX, target.design_stolen_marks + 1)
+        target.design_bonus_speed = max(-0.3, target.design_bonus_speed - STOLEN_STEAL_RATIO)
+        attacker.design_bonus_speed = min(0.2, attacker.design_bonus_speed + STOLEN_STEAL_RATIO)
+    if role_num == 108:
+        add_design_effect(
+            game_state,
+            DesignEffect("rift_field", attacker, pygame.Vector2(target.pos), radius=12.0, lifetime=RIFT_FIELD_DURATION),
+        )
     if role_num == 78 and random.random() < 0.2:
         call_target_method(target, "apply_hell_burn", 1, HELLBRINGER_BURN_DURATION, attacker)
     if role_num == 80:
@@ -6231,6 +6664,7 @@ def fire_design_basic_attack(attacker, target, game_state):
                     pierce=role_num == 59,
                     slow_amount=0.5 if attacker.design_element_mode == "ice" else 0.0,
                     slow_duration=2.0 if attacker.design_element_mode == "ice" else 0.0,
+                    on_hit=(lambda proj, tgt, dealt, hgs: apply_design_hit_effects(attacker, tgt, hgs, False)) if role_num in {104, 106, 108} else None,
                 )
         attacker.design_sentinel_lock = False
     attacker.attack_cooldown = attacker.get_basic_attack_cooldown()
@@ -6419,6 +6853,8 @@ def cast_design_skill(caster, game_state, token=None):
     elif token == "summon_wolf":
         if has_living_design_summon(game_state, caster.owner_id, "wolf"):
             return False
+        if getattr(caster, "design_wolf_cd_timer", 0.0) > 0:
+            return False
         game_state["design_summons"].append(DesignSummon(caster, "wolf", caster.pos + random_unit_vector() * 18))
     elif token == "plague_mark":
         target = select_nearest_enemy(caster, game_state["characters"])
@@ -6444,7 +6880,7 @@ def cast_design_skill(caster, game_state, token=None):
         caster.design_damage_reduction = DESIGN_FORTRESS_REDUCTION
         caster.design_taunt_timer = 5.0
         for enemy in enemies:
-            if (enemy.pos - caster.pos).length() <= DESIGN_FORTRESS_RADIUS + enemy.radius:
+            if isinstance(enemy, Character) and (enemy.pos - caster.pos).length() <= DESIGN_FORTRESS_RADIUS + enemy.radius:
                 enemy.design_taunt_timer = max(enemy.design_taunt_timer, 5.0)
                 enemy.design_taunt_owner_id = caster.owner_id
     elif token == "cannon_support":
@@ -6464,7 +6900,7 @@ def cast_design_skill(caster, game_state, token=None):
         caster.bloodwraith_shield_hp = max(caster.bloodwraith_shield_hp, caster.max_hp * BLOODWRAITH_SHIELD_RATIO)
     elif token == "phoenix_wrath":
         nearest = sorted(
-            (enemy for enemy in enemies if enemy.alive),
+            (enemy for enemy in enemies if enemy.alive and isinstance(enemy, Character)),
             key=lambda enemy: (enemy.pos - caster.pos).length_squared(),
         )[:PHOENIX_WRATH_TARGETS]
         for enemy in nearest:
@@ -6479,7 +6915,7 @@ def cast_design_skill(caster, game_state, token=None):
         caster.design_damage_reduction = max(caster.design_damage_reduction, XUANWU_BULWARK_DAMAGE_REDUCTION)
         caster.design_fortress_timer = max(caster.design_fortress_timer, XUANWU_BULWARK_DURATION)
         for enemy in enemies:
-            if (enemy.pos - caster.pos).length() <= XUANWU_BULWARK_TAUNT_RADIUS + enemy.radius:
+            if isinstance(enemy, Character) and (enemy.pos - caster.pos).length() <= XUANWU_BULWARK_TAUNT_RADIUS + enemy.radius:
                 enemy.design_taunt_timer = max(enemy.design_taunt_timer, XUANWU_BULWARK_TAUNT_DURATION)
                 enemy.design_taunt_owner_id = caster.owner_id
     elif token == "tiger_roar":
@@ -6532,9 +6968,9 @@ def cast_design_skill(caster, game_state, token=None):
             caster.design_dragon_sweep_cooldown = DRAGON_SWEEP_COOLDOWN
             caster.dragon_switch(game_state, breath_before)
     elif token == "susanoo_ominous_raijin":
-        living = [enemy for enemy in enemies if enemy.alive]
+        living = [enemy for enemy in enemies if enemy.alive and isinstance(enemy, Character)]
         if living:
-            prey = max(living, key=lambda e: (e.design_susanoo_prowl, -((e.pos - caster.pos).length_squared())))
+            prey = max(living, key=lambda e: (int(getattr(e, "design_susanoo_prowl", 0)), -((e.pos - caster.pos).length_squared())))
             caster.design_untargetable_timer = max(caster.design_untargetable_timer, SUSANOO_CAST_INVULN)
             prowl_before = prey.design_susanoo_prowl
             for _ in range(SUSANOO_RAIJIN_BOLTS):
@@ -6550,6 +6986,115 @@ def cast_design_skill(caster, game_state, token=None):
             prep_pos = pygame.Vector2(prey.pos)
             prey.design_susanoo_prowl = 0
             spawn_attack_impact(game_state, prep_pos, SUSANOO_THUNDER_COLOR, radius=18, thickness=3, burst_count=12)
+    elif token == "ghost_fear":
+        living = [enemy for enemy in enemies if enemy.alive and isinstance(enemy, Character)]
+        for enemy in living:
+            if (enemy.pos - caster.pos).length() <= GHOST_BARAGE_RADIUS + getattr(enemy, "radius", 0):
+                dread = min(GHOST_DREAD_MAX, int(getattr(enemy, "design_dread", 0)))
+                dealt = enemy.take_damage(
+                    GHOST_BARAGE_BASE + GHOST_BARAGE_PER_STACK * dread,
+                    source=caster,
+                    damage_type="design_spell_ghost_fear",
+                    game_state=game_state,
+                )
+                if dread >= GHOST_DREAD_MAX:
+                    enemy.apply_fear(GHOST_BARAGE_FEAR, caster.owner_id)
+                    enemy.design_dread = 0
+                    enemy.design_dread_timer = 0.0
+        spawn_attack_impact(game_state, caster.pos, GHOST_FEAR_TEAL, radius=30, thickness=3, burst_count=14)
+    elif token == "flame_wheel":
+        for enemy in enemies:
+            ring_distance = (enemy.pos - caster.pos).length()
+            if ring_distance <= FLAME_WHEEL_RADIUS + getattr(enemy, "radius", 0):
+                enemy.take_damage(FLAME_WHEEL_DAMAGE, source=caster, damage_type="design_spell_flame_wheel", game_state=game_state)
+                knock_dir = enemy.pos - caster.pos
+                if knock_dir.length_squared() > 0:
+                    enemy.apply_knockback(knock_dir, FLAME_WHEEL_KNOCKBACK)
+        add_design_effect(
+            game_state,
+            DesignEffect("flame_ring", caster, pygame.Vector2(caster.pos), radius=FLAME_WHEEL_RADIUS, lifetime=FLAME_WHEEL_REMAIN, dps=FLAME_WHEEL_CIRCLE_DPS),
+        )
+        caster.design_spell_haste_timer = FLAME_DANCER_HASTE_DURATION
+        spawn_attack_impact(game_state, caster.pos, (232, 86, 52), radius=26, thickness=3, burst_count=16)
+    elif token == "abyss_eye":
+        living = [enemy for enemy in enemies if enemy.alive]
+        if living:
+            prey = max(living, key=lambda e: (min(GAZE_MAX, int(getattr(e, "design_gaze", 0))), -((e.pos - caster.pos).length_squared())))
+            target_pos = pygame.Vector2(prey.pos)
+            add_design_effect(
+                game_state,
+                DesignEffect(
+                    "abyss_charge",
+                    caster,
+                    target_pos,
+                    radius=30.0,
+                    lifetime=ABYSS_CHARGE_TIME,
+                    damage=ABYSS_RAY_BASE + ABYSS_RAY_PER_STACK * min(GAZE_MAX, int(getattr(prey, "design_gaze", 0))),
+                    stun=ABYSS_RAY_STUN,
+                    target_id=id(prey),
+                ),
+            )
+    elif token == "mind_steal":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is not None and target.alive:
+            stolen = min(MIND_STEAL_MAX_STEAL, target.max_hp * MIND_STEAL_LIFESTEAL_RATIO)
+            stolen = min(stolen, max(0.0, target.hp))
+            if stolen > 0:
+                target.take_damage(stolen, source=caster, damage_type="true_design_mind_steal", game_state=game_state)
+                caster.heal(stolen)
+            marks = min(STOLEN_MARK_MAX, int(getattr(target, "design_stolen_marks", 0)))
+            for enemy in enemies:
+                if enemy is not target and (enemy.pos - caster.pos).length() <= MIND_STEAL_AOE_RADIUS + getattr(enemy, "radius", 0):
+                    enemy.take_damage(
+                        MIND_STEAL_AOE_BASE + MIND_STEAL_AOE_PER_STACK * marks,
+                        source=caster,
+                        damage_type="design_spell_mind_steal_aoe",
+                        game_state=game_state,
+                    )
+            target.design_stolen_marks = 0
+        spawn_attack_impact(game_state, caster.pos, (176, 108, 236), radius=22, thickness=3, burst_count=12)
+    elif token == "rift_slash":
+        direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)
+        direction = direction.normalize()
+        start_pos = pygame.Vector2(caster.pos)
+        end_pos = caster.pos + direction * RIFT_DASH_DISTANCE
+        end_pos.x = clamp(end_pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+        end_pos.y = clamp(end_pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+        game_state["beam_events"].append(BeamEvent(start_pos, end_pos, RIFT_BLUE))
+        for enemy in enemies:
+            if enemy.alive and distance_point_to_segment(enemy.pos, start_pos, end_pos) <= getattr(enemy, "radius", 0) + 16:
+                enemy.take_damage(RIFT_DASH_DAMAGE, source=caster, damage_type="design_spell_rift_dash", game_state=game_state)
+                perp = pygame.Vector2(-direction.y, direction.x)
+                side = 1.0 if (enemy.pos - start_pos).dot(perp) >= 0 else -1.0
+                enemy.apply_knockback(perp * side, RIFT_DASH_KNOCKBACK)
+        caster.pos = end_pos
+        caster.update_rect()
+        add_design_effect(
+            game_state,
+            DesignEffect("rift_line", caster, (start_pos + end_pos) * 0.5, radius=10.0, lifetime=RIFT_LINE_DURATION, dps=RIFT_LINE_DPS, direction=direction, length=RIFT_DASH_DISTANCE),
+        )
+        spawn_attack_impact(game_state, end_pos, RIFT_BLUE, radius=18, thickness=4, burst_count=12)
+    elif token == "soul_nine_slash":
+        living = [enemy for enemy in enemies if enemy.alive]
+        blade = getattr(caster, "design_soul_blade", None)
+        if not living or blade is None or not blade.alive:
+            return False  # 剑灵不在场或场上无敌人：不消耗，等剑灵重生后再触发
+        target = select_nearest_enemy(caster, game_state["characters"])
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "soul_slash",
+                caster,
+                pygame.Vector2(blade.pos),
+                radius=10.0,
+                lifetime=SOUL_NINE_SLASH_DELAY,
+                target_id=id(target) if target is not None else None,
+                strikes_left=9,
+                max_total=SOUL_NINE_SLASH_MAX_TOTAL,
+                total_done=0,
+                blade_id=id(blade),
+            ),
+        )
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)
@@ -6717,7 +7262,7 @@ def cast_design_skill(caster, game_state, token=None):
         caster.design_damage_reduction = 0.5
         caster.design_taunt_timer = 3.0
         for enemy in enemies:
-            if (enemy.pos - caster.pos).length() <= 90.0 + enemy.radius:
+            if isinstance(enemy, Character) and (enemy.pos - caster.pos).length() <= 90.0 + enemy.radius:
                 enemy.design_taunt_timer = max(enemy.design_taunt_timer, 3.0)
                 enemy.design_taunt_owner_id = caster.owner_id
     elif token == "monsoon":
@@ -6843,7 +7388,7 @@ def cast_design_skill(caster, game_state, token=None):
         caster.update_rect()
     elif token == "chain_net":
         for enemy in enemies:
-            if enemy.design_marked and enemy.design_mark_owner_id == caster.owner_id:
+            if isinstance(enemy, Character) and getattr(enemy, "design_marked", False) and enemy.design_mark_owner_id == caster.owner_id:
                 enemy.design_marked = False
                 enemy.design_mark_duration = 0.0
                 enemy.take_damage(15.0, source=caster, damage_type="true_design_chain_net", game_state=game_state)
@@ -7093,6 +7638,7 @@ class Character:
         self.position_lock = pygame.Vector2(self.pos)
         self.design_misc_timer = 0.0
         self.spawn_fx_timer = SPAWN_FX_DURATION
+        self.gold_spawn_fx = False
         self.design_secondary_timer = 0.0
         self.design_tertiary_timer = 0.0
         self.design_passive_timer = 0.0
@@ -7174,6 +7720,29 @@ class Character:
         self.design_shell_stacks = 0
         self.design_shell_base_max_hp = self.max_hp
         self.design_shell_kill_count = 0
+        self.kill_count = 0
+        self.kill_streak = 0
+        # 104 幽灵祭司
+        self.design_dread = 0
+        self.design_dread_timer = 0.0
+        self.design_fear_timer = 0.0
+        self.design_fear_source_id = None
+        # 105 炎舞姬
+        self.design_ember = 0
+        self.design_ember_timer = 0.0
+        self.design_spell_haste_timer = 0.0
+        # 106 深渊观测者
+        self.design_gaze = 0
+        self.design_gaze_timer = 0.0
+        # 107 夺心者
+        self.design_stolen_marks = 0
+        # 108 裂空者
+        self.design_rift_phase_timer = 0.0
+        # 109 魂缚剑匣
+        self.design_immobile = False
+        self.design_soul_blade = None
+        self.design_soul_blade_timer = SOUL_BLADE_RESPAWN_DELAY
+        self.design_wolf_cd_timer = 0.0
         self.design_shell_hit_counter = 0
         self.design_shell_guard_cooldown = 0.0
         self.design_shell_counter_timer = 0.0
@@ -7410,6 +7979,60 @@ class Character:
 
     def is_gravekeeper(self):
         return self.job_name == "DesignRole52_gravekeeper"
+
+    def is_ghost_priest(self):
+        return self.job_name == "DesignRole104_ghost_priest"
+
+    def is_flame_dancer(self):
+        return self.job_name == "DesignRole105_flame_dancer"
+
+    def is_abyssal_watcher(self):
+        return self.job_name == "DesignRole106_abyssal_watcher"
+
+    def is_mind_thief(self):
+        return self.job_name == "DesignRole107_mind_thief"
+
+    def is_riftbreaker(self):
+        return self.job_name == "DesignRole108_riftbreaker"
+
+    def is_soul_casket(self):
+        return self.job_name == SOUL_CASKET_JOB
+
+    def spawn_soul_blade(self, game_state):
+        if game_state is None:
+            return None
+        blade = DesignSummon(self, "soul_blade", self.pos + pygame.Vector2(SOUL_BLADE_ORBIT, 0))
+        game_state["design_summons"].append(blade)
+        self.design_soul_blade = blade
+        return blade
+
+    def update_soul_blade(self, dt, game_state):
+        if not self.is_soul_casket() or game_state is None:
+            return
+        blade = self.design_soul_blade
+        if blade is not None and not blade.alive:
+            self.design_soul_blade = None
+            blade = None
+        if blade is None:
+            self.design_soul_blade_timer = max(0.0, getattr(self, "design_soul_blade_timer", 0.0) - dt)
+            if self.design_soul_blade_timer <= 0:
+                self.spawn_soul_blade(game_state)
+
+    def apply_dread(self, stacks=1):
+        self.design_dread = min(GHOST_DREAD_MAX, self.design_dread + max(0, int(stacks)))
+        self.design_dread_timer = GHOST_DREAD_DURATION
+
+    def apply_fear(self, duration, source_id):
+        self.design_fear_timer = max(self.design_fear_timer, duration)
+        self.design_fear_source_id = source_id
+
+    def apply_ember(self, stacks=1):
+        self.design_ember = min(FLAME_EMBER_MAX, self.design_ember + max(0, int(stacks)))
+        self.design_ember_timer = FLAME_EMBER_DURATION
+
+    def apply_gaze(self, stacks=1):
+        self.design_gaze = min(GAZE_MAX, self.design_gaze + max(0, int(stacks)))
+        self.design_gaze_timer = GAZE_DURATION
 
     def get_gravekeeper_effects(self, game_state, effect_type):
         if game_state is None:
@@ -8642,6 +9265,17 @@ class Character:
                     arc_target.take_damage(damage * SUSANOO_ARC_RATIO, source=source_character, damage_type="design_spell_susanoo_arc", game_state=game_state)
         if source_character is not None and source_character.design_meta.get("role_num") == 59 and self.design_ranger_mark > 0 and not is_true_damage:
             damage *= 1.0 + RANGER_MARK_DAMAGE_BONUS * min(RANGER_MARK_MAX, self.design_ranger_mark)
+        if source_character is not None and source_character.is_ghost_priest() and self.design_dread > 0 and not is_true_damage:
+            damage *= 1.0 + GHOST_DREAD_DAMAGE_BONUS_PER_STACK * min(GHOST_DREAD_MAX, self.design_dread)
+        if source_character is not None and source_character.is_abyssal_watcher() and self.design_gaze > 0:
+            if is_true_damage:
+                damage *= 1.0 + GAZE_TRUE_BONUS_PER_STACK * min(GAZE_MAX, self.design_gaze)
+            elif (self.pos - source_character.pos).length_squared() > 1.0:
+                damage *= 1.0 + GAZE_MOVE_BONUS_PER_STACK * min(GAZE_MAX, self.design_gaze)
+        if self.design_stolen_marks > 0 and not is_true_damage:
+            damage *= 1.0 - STOLEN_PASSIVE_DAMAGE_BONUS_PER_STACK * min(STOLEN_MARK_MAX, self.design_stolen_marks)
+        if self.job_name == MIND_THIEF_JOB and source_character is not None and int(getattr(source_character, "design_stolen_marks", 0)) > 0 and not is_true_damage:
+            damage *= 1.0 - STOLEN_CRIT_REDUCTION * 0.3  # 识破：带窃思的敌人对夺心者伤害降低
         if self.is_equilibrium_arbiter() and damage > 0:
             if damage_kind == DAMAGE_KIND_PHYSICAL:
                 self.physical_resistance = max(0.0, self.physical_resistance + EQUILIBRIUM_THRESHOLD_RESIST_PHYS_DELTA)
@@ -8765,6 +9399,26 @@ class Character:
                     source_character.design_shell_kill_count += 1
                 if source_character is not None and source_character.is_dragon():
                     source_character.design_dragon_awe = min(DRAGON_AWE_MAX, source_character.design_dragon_awe + 1)
+                if source_character is not None and source_character.is_abyssal_watcher() and getattr(self, "design_gaze", 0) > 0:
+                    source_character.heal(source_character.max_hp * GAZE_KILL_HEAL_RATIO)
+                if self.is_soul_casket() and self.design_soul_blade is not None:
+                    self.design_soul_blade.alive = False
+                    self.design_soul_blade = None
+                if self.is_soul_casket() and game_state is not None:
+                    for summoned in game_state.get("design_summons", []):
+                        if summoned.summon_type == "soul_blade" and summoned.owner_id == self.owner_id:
+                            summoned.alive = False
+                if source_character is not None and source_character is not self and source_character.alive:
+                    source_character.kill_count += 1
+                    source_character.kill_streak += 1
+                    if source_character.kill_streak in KILLSTREAK_BANNERS:
+                        game_state.setdefault("kill_banners", []).append(
+                            KillBanner(
+                                source_character,
+                                KILLSTREAK_BANNERS[source_character.kill_streak],
+                            )
+                        )
+                self.kill_streak = 0
         if damage > 0:
             if count_on_damage_dealt and source_character is not None and source_character.owner_id != self.owner_id:
                 source_character.on_damage_dealt(damage, damage_type)
@@ -8866,6 +9520,10 @@ class Character:
             modifier *= 1.0 + RANGER_DASH_SPEED_BONUS
         if self.gravekeeper_rot_stacks > 0:
             modifier *= 1.0 - GRAVEKEEPER_ROT_SLOW_PER_STACK * min(GRAVEKEEPER_ROT_MAX, self.gravekeeper_rot_stacks)
+        if self.design_dread > 0:
+            modifier *= 1.0 - GHOST_DREAD_SLOW_PER_STACK * min(GHOST_DREAD_MAX, self.design_dread)
+        if self.design_spell_haste_timer > 0:
+            modifier *= 1.0 + FLAME_DANCER_HASTE_BONUS
         modifier *= max(0.6, 1.0 + self.design_bonus_speed)
         return modifier
 
@@ -8887,6 +9545,8 @@ class Character:
         if self.control_timer > 0:
             blocked_owner_id = self.control_owner_id
         if self.charm_timer > 0:
+            return None
+        if self.design_fear_timer > 0:
             return None
         if self.job_name == SOUL_ARBITER_JOB_NAME and self.soul_arbiter_hunt_timer > 0:
             chained_ids = set(self.soul_arbiter_chains.keys())
@@ -9752,6 +10412,26 @@ class Character:
             self.gravekeeper_rot_timer = max(0.0, self.gravekeeper_rot_timer - dt)
             if self.gravekeeper_rot_timer == 0:
                 self.gravekeeper_rot_stacks = 0
+        if self.design_dread_timer > 0:
+            self.design_dread_timer = max(0.0, self.design_dread_timer - dt)
+            if self.design_dread_timer == 0:
+                self.design_dread = 0
+        if self.design_ember_timer > 0:
+            self.design_ember_timer = max(0.0, self.design_ember_timer - dt)
+            if self.design_ember_timer == 0:
+                self.design_ember = 0
+        if self.design_gaze_timer > 0:
+            self.design_gaze_timer = max(0.0, self.design_gaze_timer - dt)
+            if self.design_gaze_timer == 0:
+                self.design_gaze = 0
+        if self.design_fear_timer > 0:
+            self.design_fear_timer = max(0.0, self.design_fear_timer - dt)
+            if self.design_fear_timer == 0:
+                self.design_fear_source_id = None
+        if self.design_spell_haste_timer > 0:
+            self.design_spell_haste_timer = max(0.0, self.design_spell_haste_timer - dt)
+        if self.design_wolf_cd_timer > 0:
+            self.design_wolf_cd_timer = max(0.0, self.design_wolf_cd_timer - dt)
         if self.design_link_timer > 0:
             self.design_link_timer = max(0.0, self.design_link_timer - dt)
             if self.design_link_timer == 0:
@@ -10094,6 +10774,43 @@ class Character:
                     target.apply_knockback(target.pos - self.pos, WINDRUNNER_REPEL_DISTANCE)
         if self.hex_curse_timer > 0:
             self.hex_curse_timer = max(0.0, self.hex_curse_timer - dt)
+        if self.design_ember > 0 and game_state is not None:
+            # 灼炎 dot + 满层小爆炸
+            self.take_damage(
+                FLAME_EMBER_DPS * dt * self.design_ember,
+                source=next((c for c in game_state["characters"] if c.is_flame_dancer() and c.owner_id != self.owner_id), None),
+                damage_type="design_spell_flame_ember",
+                game_state=game_state,
+            )
+        if self.is_ghost_priest() and game_state is not None:
+            self.design_misc_timer += dt
+            while self.design_misc_timer >= GHOST_WHISPER_INTERVAL:
+                self.design_misc_timer -= GHOST_WHISPER_INTERVAL
+                whisper_target = None
+                for candidate in get_targetables(game_state):
+                    if candidate.alive and candidate.owner_id != self.owner_id and int(getattr(candidate, "design_dread", 0)) > 0:
+                        if whisper_target is None or (candidate.pos - self.pos).length_squared() < (whisper_target.pos - self.pos).length_squared():
+                            whisper_target = candidate
+                if whisper_target is not None:
+                    whisper_target.take_damage(GHOST_WHISPER_DAMAGE, source=self, damage_type="design_spell_ghost_whisper", game_state=game_state)
+                    whisper_target.apply_fear(GHOST_WHISPER_FEAR, self.owner_id)
+                    spawn_attack_impact(game_state, whisper_target.pos, GHOST_FEAR_TEAL, radius=12, thickness=2, burst_count=8)
+        if self.is_abyssal_watcher() and game_state is not None:
+            for candidate in get_targetables(game_state):
+                if candidate.alive and candidate.owner_id != self.owner_id and int(getattr(candidate, "design_gaze", 0)) > 0:
+                    pass  # 凝视伤害加成在 take_damage 里处理
+        if self.is_riftbreaker() and game_state is not None:
+            self.design_rift_phase_timer += dt
+            while self.design_rift_phase_timer >= RIFT_PHASE_INTERVAL:
+                self.design_rift_phase_timer -= RIFT_PHASE_INTERVAL
+                phase_dir = random_unit_vector()
+                phase_target = self.pos + phase_dir * RIFT_PHASE_DISTANCE
+                phase_target.x = clamp(phase_target.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
+                phase_target.y = clamp(phase_target.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
+                self.pos = phase_target
+                self.update_rect()
+                if game_state is not None:
+                    spawn_attack_impact(game_state, self.pos, RIFT_BLUE, radius=16, thickness=3, burst_count=10)
         if self.duel_haste_timer > 0:
             self.duel_haste_timer = max(0.0, self.duel_haste_timer - dt)
         if self.gladiator_duel_timer > 0:
@@ -10255,6 +10972,8 @@ class Character:
             self.update_rect()
             return
 
+        self.update_soul_blade(dt, game_state)
+
         self.process_effects(dt, game_state)
         if not self.alive:
             return
@@ -10377,6 +11096,8 @@ class Character:
                     apply_chase_noise = False
 
                 can_fire = self.attack_cooldown <= 0 and self.sniper_charge_timer <= 0 and self.charm_timer <= 0 and self.disarm_timer <= 0 and self.blind_timer <= 0
+                if self.is_soul_casket():
+                    can_fire = False  # 本体不出手，由剑灵代打
                 in_range = distance <= current_range or current_range >= WEAPON_RANGE_INFINITE
                 if can_fire and in_range:
                     if self.held_weapon is None:
@@ -10388,6 +11109,28 @@ class Character:
             desired = pygame.Vector2()
             hold_position = True
             apply_chase_noise = False
+
+        if self.design_immobile:
+            desired = pygame.Vector2()
+            hold_position = True
+            apply_chase_noise = False
+
+        if self.design_fear_timer > 0 and self.design_fear_source_id is not None and game_state is not None:
+            fear_source = next((c for c in game_state["characters"] if c.owner_id == self.design_fear_source_id and c.alive), None)
+            if fear_source is not None:
+                away = self.pos - fear_source.pos
+                if away.length_squared() > 0:
+                    desired = away.normalize()
+                    hold_position = False
+                    apply_chase_noise = True
+                else:
+                    desired = random_unit_vector()
+                    hold_position = False
+                    apply_chase_noise = True
+            else:
+                desired = random_unit_vector()
+                hold_position = False
+                apply_chase_noise = True
 
         if apply_chase_noise and desired.length_squared() > 0:
             desired = self.apply_chase_noise(desired.normalize(), dt)
@@ -10488,6 +11231,9 @@ class Character:
     def draw_spawn_fx(self, surface):
         if self.spawn_fx_timer <= 0:
             return
+        if self.gold_spawn_fx:
+            self.draw_spawn_fx_gold(surface)
+            return
         progress = 1.0 - self.spawn_fx_timer / max(0.1, SPAWN_FX_DURATION)
         center_x = round(self.pos.x)
         center_y = round(self.pos.y)
@@ -10524,6 +11270,81 @@ class Character:
                 ex = cx + math.cos(angle) * end_r
                 ey = cy + math.sin(angle) * end_r * 0.85 - (progress * 14.0)
                 pygame.draw.line(overlay, (*SPAWN_FX_GLOW_COLOR, max(24, spark_alpha)), (round(sx), round(sy)), (round(ex), round(ey)), 2)
+        surface.blit(overlay, (center_x - extents // 2, center_y - extents // 2))
+
+    def draw_spawn_fx_gold(self, surface):
+        progress = 1.0 - self.spawn_fx_timer / max(0.1, SPAWN_FX_DURATION)
+        center_x = round(self.pos.x)
+        center_y = round(self.pos.y)
+        local_radius = max(8, int(self.radius))
+        gold = (255, 208, 54)
+        gold_light = (255, 246, 190)
+        extents = local_radius * 4 + 40
+        overlay = pygame.Surface((extents, extents), pygame.SRCALPHA)
+        cx = extents // 2
+        cy = extents // 2
+        fade = 1.0 - progress
+        # 底部金色光晕垫片
+        if fade > 0:
+            glow_r = int(local_radius * (1.1 + progress * 0.9))
+            pygame.draw.circle(overlay, (*gold, int(52 * fade)), (cx, cy), max(6, glow_r))
+        # 金色双光柱：亮金主柱 + 暖白描边，更宽更高
+        pillar_half = max(4, int(local_radius * 0.72 * (1.0 - progress * 0.4)))
+        pillar_height = int(extents * 0.82 * (1.18 - progress * 0.3))
+        pillar_alpha = int(170 * fade)
+        if pillar_alpha > 0:
+            pillar_rect = pygame.Rect(cx - pillar_half, cy - local_radius - pillar_height, pillar_half * 2, pillar_height + local_radius * 2)
+            pygame.draw.rect(overlay, (*gold, min(255, pillar_alpha)), pillar_rect, border_radius=pillar_half)
+            pygame.draw.rect(overlay, (*gold_light, max(34, pillar_alpha // 2)), pillar_rect.inflate(pillar_half - 2, 8), border_radius=pillar_half + 3)
+            pygame.draw.rect(overlay, (*gold_light, max(18, pillar_alpha // 3)), pillar_rect.inflate(pillar_half + 4, 12), border_radius=pillar_half + 6)
+        # 金色双层光环
+        ring_alpha = int(200 * fade)
+        if ring_alpha > 0:
+            ring_r = int(local_radius * (0.7 + progress * 1.9))
+            pygame.draw.circle(overlay, (*gold, max(34, ring_alpha)), (cx, cy), max(4, ring_r), 4)
+            pygame.draw.circle(overlay, (*gold_light, max(18, ring_alpha // 2)), (cx, cy), max(3, ring_r - 7), 1)
+        # 金色 8 道射线 + 顶部小皇冠
+        if progress < 0.7:
+            spark_alpha = int(230 * (1.0 - progress / 0.7))
+            for index in range(8):
+                angle = math.tau * index / 8
+                start_r = local_radius * 0.55
+                end_r = local_radius * (0.9 + progress * 1.6)
+                sx = cx + math.cos(angle) * start_r
+                sy = cy + math.sin(angle) * start_r * 0.9
+                ex = cx + math.cos(angle) * end_r
+                ey = cy + math.sin(angle) * end_r * 0.9 - (progress * 18.0)
+                pygame.draw.line(overlay, (*gold_light, max(28, spark_alpha)), (round(sx), round(sy)), (round(ex), round(ey)), 3)
+            crown_y = cy - local_radius - int(extents * 0.68)
+            crown_width = local_radius * 0.9
+            crown_alpha = max(60, int(255 * (1.0 - progress * 0.75)))
+            pygame.draw.polygon(
+                overlay,
+                (*gold, crown_alpha),
+                [
+                    (cx - int(crown_width), crown_y),
+                    (cx - int(crown_width * 0.55), crown_y - int(crown_width * 0.55)),
+                    (cx - int(crown_width * 0.22), crown_y + int(crown_width * 0.06)),
+                    (cx, crown_y - int(crown_width * 0.72)),
+                    (cx + int(crown_width * 0.22), crown_y + int(crown_width * 0.06)),
+                    (cx + int(crown_width * 0.55), crown_y - int(crown_width * 0.55)),
+                    (cx + int(crown_width), crown_y),
+                ],
+            )
+            pygame.draw.polygon(
+                overlay,
+                (*gold_light, min(255, crown_alpha)),
+                [
+                    (cx - int(crown_width), crown_y),
+                    (cx - int(crown_width * 0.55), crown_y - int(crown_width * 0.55)),
+                    (cx - int(crown_width * 0.22), crown_y + int(crown_width * 0.06)),
+                    (cx, crown_y - int(crown_width * 0.72)),
+                    (cx + int(crown_width * 0.22), crown_y + int(crown_width * 0.06)),
+                    (cx + int(crown_width * 0.55), crown_y - int(crown_width * 0.55)),
+                    (cx + int(crown_width), crown_y),
+                ],
+                2,
+            )
         surface.blit(overlay, (center_x - extents // 2, center_y - extents // 2))
 
     def draw_bars(self, surface, label_font):
@@ -10826,6 +11647,7 @@ def create_game_state(player_count, timed_weapon_orb_drops_enabled=True):
         "timed_weapon_orb_drops_enabled": timed_weapon_orb_drops_enabled,
         "damage_texts": [],
         "death_particles": [],
+        "kill_banners": [],
         "shake_timer": 0.0,
         "shake_magnitude": 0.0,
         "winner_text": "",
@@ -10873,6 +11695,8 @@ def update_world_lists(game_state, dt):
 
     for damage_text in game_state["damage_texts"]:
         damage_text.update(dt)
+    for banner in game_state.get("kill_banners", []):
+        banner.update(dt)
     for particle in game_state["death_particles"]:
         particle.update(dt)
     for particle in game_state["spell_trail_particles"]:
@@ -10919,6 +11743,7 @@ def update_world_lists(game_state, dt):
     game_state["weapon_orbs"] = [orb for orb in game_state["weapon_orbs"] if orb.alive]
     game_state["damage_texts"] = [damage_text for damage_text in game_state["damage_texts"] if damage_text.alive]
     game_state["death_particles"] = [particle for particle in game_state["death_particles"] if particle.alive]
+    game_state["kill_banners"] = [banner for banner in game_state.get("kill_banners", []) if banner.alive]
     game_state["spell_trail_particles"] = [particle for particle in game_state["spell_trail_particles"] if particle.alive]
     game_state["melee_effects"] = [melee_effect for melee_effect in game_state["melee_effects"] if melee_effect.alive]
     if game_state["shake_timer"] > 0:
@@ -10964,6 +11789,8 @@ def draw_world(surface, game_state, label_font):
         particle.draw(surface)
     for damage_text in game_state["damage_texts"]:
         damage_text.draw(surface, label_font)
+    for banner in game_state.get("kill_banners", []):
+        banner.draw(surface, label_font)
 
 
 def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops):
@@ -11002,6 +11829,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     pokedex_rect = pygame.Rect(244, 576, 312, 60)
     effects_rect = pygame.Rect(244, 646, 312, 52)
     win_rate_rect = pygame.Rect(244, 710, 312, 44)
+    settings_rect = pygame.Rect(558, 352, 118, 34)
     weapon_drops_rect = pygame.Rect(244, 356, 300, 28)
     weapon_checkbox_rect = pygame.Rect(244, 356, 20, 20)
 
@@ -11017,6 +11845,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     pokedex_color = MENU_BUTTON_HOVER if hover_name == "pokedex" else MENU_BUTTON
     effects_color = MENU_BUTTON_HOVER if hover_name == "effects" else MENU_BUTTON
     win_rate_color = MENU_BUTTON_HOVER if hover_name == "win_rate" else MENU_BUTTON
+    settings_color = MENU_BUTTON_HOVER if hover_name == "settings" else MENU_BUTTON
 
     if player_count <= MIN_CHARACTERS:
         minus_color = MENU_BUTTON_DISABLED
@@ -11027,6 +11856,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     draw_panel(screen, increment_rect, plus_color, radius=12, shadow_offset=(2, 2))
     draw_panel(screen, start_rect, start_color, radius=14, shadow_offset=(3, 4), accent_color=(255, 214, 120))
     draw_panel(screen, pokedex_rect, pokedex_color, radius=12, shadow_offset=(2, 3))
+    draw_panel(screen, settings_rect, settings_color, radius=8, shadow_offset=(1, 1))
     draw_panel(screen, effects_rect, effects_color, radius=12, shadow_offset=(2, 3))
     draw_panel(screen, win_rate_rect, win_rate_color, radius=12, shadow_offset=(2, 3))
 
@@ -11069,6 +11899,13 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
         pygame.draw.line(screen, TEXT_COLOR, (weapon_checkbox_rect.left + 4, weapon_checkbox_rect.centery), (weapon_checkbox_rect.centerx - 1, weapon_checkbox_rect.bottom - 5), 2)
         pygame.draw.line(screen, TEXT_COLOR, (weapon_checkbox_rect.centerx - 1, weapon_checkbox_rect.bottom - 5), (weapon_checkbox_rect.right - 4, weapon_checkbox_rect.top + 4), 2)
 
+    # 设置按钮（齿轮图标 + 文字）
+    settings_color_on = MENU_ACCENT if GAME_SETTINGS.get("fullscreen") else settings_color
+    pygame.draw.circle(screen, (120, 160, 210), (settings_rect.left + 20, settings_rect.centery), 6, 2)
+    pygame.draw.circle(screen, (120, 160, 210), (settings_rect.left + 20, settings_rect.centery), 2, 1)
+    settings_text = subtitle_font.render("设置", True, TEXT_COLOR)
+    screen.blit(settings_text, (settings_rect.left + 34, settings_rect.centery - settings_text.get_height() // 2))
+
     # 底部信息条
     version_text = subtitle_font.render(f"已收录 {len(JOB_DEFS)} 名角色 · 圆环斗场 v0.9 · Enter 开始战斗", True, (150, 164, 180))
     screen.blit(version_text, version_text.get_rect(midbottom=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 10)))
@@ -11080,6 +11917,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
         "pokedex": pokedex_rect,
         "effects": effects_rect,
         "win_rate": win_rate_rect,
+        "settings": settings_rect,
         "weapon_drops": weapon_drops_rect,
     }
 
@@ -11092,6 +11930,7 @@ def get_menu_button_rects():
         "pokedex": pygame.Rect(244, 576, 312, 60),
         "effects": pygame.Rect(244, 646, 312, 52),
         "win_rate": pygame.Rect(244, 710, 312, 44),
+        "settings": pygame.Rect(558, 352, 118, 34),
         "weapon_drops": pygame.Rect(244, 356, 300, 28),
     }
 
@@ -11103,6 +11942,74 @@ def draw_battle_end_button(surface, button_font, hover_active):
     button_text = button_font.render("Back To Menu", True, TEXT_COLOR)
     surface.blit(button_text, button_text.get_rect(center=button_rect.center))
     return button_rect
+
+
+def draw_result_summary(surface, title_font, body_font, game_state, panel_rect, close_rect):
+    overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    overlay.fill((6, 10, 16, 150))
+    surface.blit(overlay, (0, 0))
+
+    draw_panel(surface, panel_rect, MENU_PANEL, accent_color=(255, 214, 120), radius=18, shadow_offset=(4, 6))
+
+    winner = game_state.get("winner_character")
+    title = title_font.render("本局结算", True, TEXT_COLOR)
+    surface.blit(title, title.get_rect(center=(panel_rect.centerx, panel_rect.top + 30)))
+
+    participants = list(game_state.get("battle_participants", game_state.get("characters", [])))
+    alive_winner = winner if winner is not None and winner.alive else (next((c for c in participants if c.alive), None))
+
+    # 冠军卡
+    if alive_winner is not None:
+        champ_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 58, panel_rect.width - 48, 64)
+        draw_panel(surface, champ_rect, (30, 38, 50), accent_color=(255, 214, 120), radius=10, shadow_offset=(2, 2))
+        draw_shape_icon(surface, alive_winner.shape, alive_winner.color, (champ_rect.left + 32, champ_rect.centery), 20)
+        name = body_font.render(f"冠军：{get_character_display_name(alive_winner)}", True, TEXT_COLOR)
+        surface.blit(name, (champ_rect.left + 66, champ_rect.top + 8))
+        stats_line = body_font.render(
+            f"伤害 {int(alive_winner.damageDealt)}    承伤 {int(alive_winner.damageTaken)}    击杀 {int(getattr(alive_winner, 'kill_count', 0))}",
+            True,
+            (150, 214, 170),
+        )
+        surface.blit(stats_line, (champ_rect.left + 66, champ_rect.top + 36))
+
+    # Top 3 排行
+    col_widths = (150, 150, 150)
+    cols = [
+        ("伤害榜", "damageDealt", (220, 72, 72)),
+        ("承伤榜", "damageTaken", (84, 150, 255)),
+        ("击杀榜", "kill_count", (255, 214, 120)),
+    ]
+    col_x = panel_rect.left + 18
+    for col_index, (label, attr, color) in enumerate(cols):
+        col_rect = pygame.Rect(panel_rect.left + 18 + col_index * 178, panel_rect.top + 134, 166, 150)
+        draw_panel(surface, col_rect, (24, 30, 40), border_color=(60, 70, 84), radius=10, shadow_offset=(1, 2))
+        header = body_font.render(label, True, color)
+        surface.blit(header, header.get_rect(center=(col_rect.centerx, col_rect.top + 18)))
+        ranked = sorted(participants, key=lambda character: -float(getattr(character, attr, 0.0) or 0.0))
+        for rank, character in enumerate(ranked[:3]):
+            if character is None:
+                continue
+            item_y = col_rect.top + 42 + rank * 36
+            rank_color = (255, 214, 120) if rank == 0 else (200, 208, 220)
+            rank_text = body_font.render(f"{rank + 1}.", True, rank_color)
+            surface.blit(rank_text, (col_rect.left + 10, item_y))
+            name_text = body_font.render(truncate_text(get_character_display_name(character), body_font, 74), True, TEXT_COLOR)
+            surface.blit(name_text, (col_rect.left + 40, item_y))
+            value_text = body_font.render(str(int(round(float(getattr(character, attr, 0.0))))), True, color)
+            surface.blit(value_text, value_text.get_rect(right=col_rect.right - 10, centery=item_y + 10))
+            draw_shape_icon(surface, character.shape, character.color, (col_rect.left + 26, item_y + 10), 8)
+
+    # MVP
+    best = max(participants, key=lambda character: float(getattr(character, "damageDealt", 0.0) or 0.0), default=None)
+    if best is not None:
+        mvp_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 296, panel_rect.width - 48, 40)
+        draw_panel(surface, mvp_rect, (30, 36, 44), border_color=(74, 82, 92), radius=8, shadow_offset=(1, 1))
+        mvp_text = body_font.render(f"MVP：{get_character_display_name(best)}（最高输出 {int(best.damageDealt)}）", True, (150, 214, 170))
+        surface.blit(mvp_text, mvp_text.get_rect(center=(panel_rect.centerx, panel_rect.centery - 18)))
+
+    draw_panel(surface, close_rect, MENU_BUTTON_HOVER, radius=10, shadow_offset=(2, 2))
+    close_text = body_font.render("关闭", True, TEXT_COLOR)
+    surface.blit(close_text, close_text.get_rect(center=close_rect.center))
 
 
 def draw_pause_menu(surface, title_font, subtitle_font, button_font, hover_name):
@@ -11175,12 +12082,43 @@ def get_role_attack_tag(job_name, data):
 def filter_pokedex_names(ordered_names, query):
     if not query:
         return list(ordered_names)
-    q = query.lower()
+    q = query.strip().lower()
     out = []
     for name in ordered_names:
         data = get_pokedex_data(name)
         if q in data["display_name"].lower() or q in name.lower():
             out.append(name)
+            continue
+        # 编号搜索：支持 # 前缀与纯数字
+        num = get_role_display_number(name)
+        if num is not None:
+            if q == str(num) or q == f"#{num}":
+                out.append(name)
+                continue
+            digits = "".join(ch for ch in q if ch.isdigit())
+            if digits and digits in str(num):
+                out.append(name)
+                continue
+        # 英文名（CHARACTER_DATA 的原始 name 字段）
+        if q in str(data.get("name", "")).lower():
+            out.append(name)
+            continue
+        # 中文技能名 / 技能关键词
+        if q in str(data.get("display_skill_name", "")).lower():
+            out.append(name)
+            continue
+        # 攻击方式标签（近 / 远 / 物 / 法 / 真 / 混）
+        tag = get_role_attack_tag(name, data)
+        if q in tag.lower():
+            out.append(name)
+            continue
+        # 抗性提示语：物抗 / 法抗 数值
+        if "物抗" in q and data.get("physical_resistance", 0) >= 1.0:
+            out.append(name)
+            continue
+        if "法抗" in q and data.get("spell_resistance", 0) >= 1.0:
+            out.append(name)
+            continue
     return out
 
 
@@ -11393,6 +12331,23 @@ def build_win_rate_rows(body_font, stats):
     return rows
 
 
+def get_top_three_jobs(stats=None, min_matches=3):
+    """返回当前胜率排行榜前三的角色 job_name 列表（需至少 min_matches 场才有资格）。"""
+    if stats is None:
+        stats = load_win_rate_stats()
+    candidates = []
+    for job_name in CHARACTER_DATA.keys():
+        entry = stats.get(job_name, {"matches": 0, "wins": 0})
+        matches = max(0, int(entry.get("matches", 0)))
+        wins = max(0, min(matches, int(entry.get("wins", 0))))
+        if matches < min_matches:
+            continue
+        win_rate = wins / matches * 100.0
+        candidates.append((job_name, win_rate, wins, matches))
+    candidates.sort(key=lambda item: (-item[1], -item[2], -item[3], item[0]))
+    return [item[0] for item in candidates[:3]]
+
+
 def draw_win_rate_screen(screen, title_font, subtitle_font, body_font, button_font, hover_name, scroll_offset, stats):
     screen.fill(BACKGROUND_COLOR)
 
@@ -11400,6 +12355,8 @@ def draw_win_rate_screen(screen, title_font, subtitle_font, body_font, button_fo
     subtitle = subtitle_font.render("统计每个角色的场次、获胜次数与胜率", True, (180, 192, 208))
     screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 52)))
     screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 84)))
+
+    top_three_jobs = set(get_top_three_jobs(stats, min_matches=3))
 
     panel_rect = pygame.Rect(36, 116, 728, 608)
     return_rect = pygame.Rect(36, 734, 220, 40)
@@ -11436,14 +12393,26 @@ def draw_win_rate_screen(screen, title_font, subtitle_font, body_font, button_fo
         fill = (26, 32, 42) if index % 2 == 0 else (22, 28, 36)
         draw_panel(screen, row_rect, fill, border_color=(46, 52, 64), radius=10, shadow_offset=(1, 1))
 
-        icon_center = (row_rect.left + 16, row_rect.centery)
+        is_top_three = row["job_name"] in top_three_jobs
+        icon_center = (row_rect.left + 22, row_rect.centery)
         draw_shape_icon(screen, row["shape"], row["color"], icon_center, 9)
+        if is_top_three:
+            crown_points = [
+                (row_rect.left + 6, row_rect.top + 8),
+                (row_rect.left + 9, row_rect.top + 15),
+                (row_rect.left + 12, row_rect.top + 9),
+                (row_rect.left + 15, row_rect.top + 16),
+                (row_rect.left + 18, row_rect.top + 9),
+                (row_rect.left + 20, row_rect.top + 14),
+            ]
+            pygame.draw.polygon(screen, (255, 208, 54), crown_points)
         name_text = truncate_text(row["display_name"], body_font, 290)
-        screen.blit(body_font.render(name_text, True, TEXT_COLOR), (row_rect.left + 34, row_rect.top + 8))
+        name_color = (255, 214, 120) if is_top_three else TEXT_COLOR
+        screen.blit(body_font.render(name_text, True, name_color), (row_rect.left + 34, row_rect.top + 8))
         screen.blit(body_font.render(str(row["matches"]), True, TEXT_COLOR), (columns["matches"], row_rect.top + 8))
         screen.blit(body_font.render(str(row["wins"]), True, TEXT_COLOR), (columns["wins"], row_rect.top + 8))
         rate_text = f"{row['win_rate']:.1f}%"
-        rate_color = MENU_ACCENT if row["matches"] > 0 else (132, 144, 160)
+        rate_color = (255, 208, 54) if is_top_three else (MENU_ACCENT if row["matches"] > 0 else (132, 144, 160))
         screen.blit(body_font.render(rate_text, True, rate_color), (columns["rate"], row_rect.top + 8))
 
     return return_rect, max_scroll
@@ -11524,7 +12493,7 @@ def describe_design_state(character):
     return " ".join(parts)
 
 
-def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_state, active_tab, hover_tab):
+def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_state, active_tab, hover_tab, follow_character_id=None):
     sidebar_rect = pygame.Rect(0, 0, BATTLE_SIDEBAR_WIDTH, BATTLE_WINDOW_HEIGHT)
     panel_rect = sidebar_rect.inflate(-16, -16)
     surface.fill((10, 14, 20), sidebar_rect)
@@ -11562,12 +12531,16 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
     row_height = 50
     bar_width = 118
     name_width = 90
+    clickable_rows = []
     for index, character in enumerate(rows):
         row_y = row_top + index * row_height
         row_rect = pygame.Rect(panel_rect.left + 6, row_y, panel_rect.width - 12, row_height - 8)
         if row_rect.bottom > panel_rect.bottom - 8:
             break
+        clickable_rows.append({"character": character, "rect": row_rect})
         row_bg = (26, 30, 38) if character.alive else (22, 24, 30)
+        if follow_character_id is not None and character.id == follow_character_id:
+            row_bg = (42, 52, 66)
         pygame.draw.rect(surface, row_bg, row_rect, border_radius=10)
         pygame.draw.rect(surface, (46, 52, 64), row_rect, 1, border_radius=10)
 
@@ -11576,12 +12549,17 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
 
         name = truncate_text(get_character_display_name(character), body_font, name_width)
         name_color = TEXT_COLOR if character.alive else (160, 168, 176)
+        if follow_character_id is not None and character.id == follow_character_id:
+            name_color = (150, 214, 170)
         name_surface = body_font.render(name, True, name_color)
         surface.blit(name_surface, (row_rect.left + 32, row_rect.top + 4))
 
         value = float(getattr(character, metric, 0.0))
         value_surface = subtitle_font.render(str(int(round(value))), True, accent)
         surface.blit(value_surface, (row_rect.right - value_surface.get_width() - 10, row_rect.top + 4))
+
+        kill_surface = subtitle_font.render(f"击杀 {getattr(character, 'kill_count', 0)}", True, (255, 214, 120))
+        surface.blit(kill_surface, (row_rect.left + 110, row_rect.top + 4))
 
         state_text = describe_design_state(character)
         if state_text and character.alive:
@@ -11594,6 +12572,7 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
         if fill_width > 0:
             pygame.draw.rect(surface, bar_inner, bar_rect.inflate(-2, -2), border_radius=4)
             pygame.draw.rect(surface, accent, pygame.Rect(bar_rect.left + 1, bar_rect.top + 1, max(1, fill_width - 2), bar_rect.height - 2), border_radius=4)
+    return clickable_rows
 
 
 def create_ui_font(size, bold=False):
@@ -11640,6 +12619,8 @@ def main_menu(screen, clock, title_font, subtitle_font, button_font):
                     return ("effects", None)
                 elif button_rects["win_rate"].collidepoint(mapped_pos):
                     return ("win_rate", None)
+                elif button_rects["settings"].collidepoint(mapped_pos):
+                    return ("settings", None)
 
         mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
         hover_name = next((name for name, rect in button_rects.items() if mouse_pos is not None and rect.collidepoint(mouse_pos)), None)
@@ -11930,15 +12911,173 @@ def win_rate_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
         clock.tick(FPS)
 
 
-def battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled=True):
+def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
+    settings = dict(GAME_SETTINGS)
+
+    volume_rect = pygame.Rect(244, 260, 300, 34)
+    volume_slider = pygame.Rect(320, 268, 190, 18)
+    quality_high_rect = pygame.Rect(290, 330, 110, 40)
+    quality_low_rect = pygame.Rect(420, 330, 110, 40)
+    entrance_rect = pygame.Rect(244, 400, 312, 40)
+    fullscreen_rect = pygame.Rect(244, 460, 312, 40)
+    return_rect = pygame.Rect(300, 560, 200, 44)
+
+    dragging_volume = False
+
+    while True:
+        canvas_rect, device_pixel_ratio = get_window_transform(screen)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((max(1, event.w), max(1, event.h)), WINDOW_FLAGS)
+                canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is None:
+                    continue
+                if return_rect.collidepoint(mapped_pos):
+                    GAME_SETTINGS.update(settings)
+                    save_settings(GAME_SETTINGS)
+                    return "menu"
+                if quality_high_rect.collidepoint(mapped_pos):
+                    settings["effects_quality"] = "high"
+                elif quality_low_rect.collidepoint(mapped_pos):
+                    settings["effects_quality"] = "low"
+                elif entrance_rect.collidepoint(mapped_pos):
+                    settings["skip_entrance"] = not settings.get("skip_entrance", False)
+                elif fullscreen_rect.collidepoint(mapped_pos):
+                    settings["fullscreen"] = not settings.get("fullscreen", False)
+                    flags = pygame.FULLSCREEN if settings["fullscreen"] else pygame.DOUBLEBUF
+                    screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), flags | pygame.DOUBLEBUF)
+                    canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                elif volume_slider.collidepoint(mapped_pos):
+                    dragged_x = clamp(mapped_pos.x - volume_slider.left, 0, volume_slider.width)
+                    settings["volume"] = int(round(dragged_x / volume_slider.width * 100))
+                    dragging_volume = True
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                dragging_volume = False
+            if event.type == pygame.MOUSEMOTION and dragging_volume:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is not None:
+                    dragged_x = clamp(mapped_pos.x - volume_slider.left, 0, volume_slider.width)
+                    settings["volume"] = int(round(dragged_x / volume_slider.width * 100))
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                GAME_SETTINGS.update(settings)
+                save_settings(GAME_SETTINGS)
+                return "menu"
+
+        mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+        hover_name = None
+        if mouse_pos is not None:
+            for name, rect in (
+                ("return", return_rect),
+                ("quality_high", quality_high_rect),
+                ("quality_low", quality_low_rect),
+                ("entrance", entrance_rect),
+                ("fullscreen", fullscreen_rect),
+            ):
+                if rect.collidepoint(mouse_pos):
+                    hover_name = name
+                    break
+
+        canvas_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        canvas_surface.fill(BACKGROUND_COLOR)
+
+        title = title_font.render("设置", True, TEXT_COLOR)
+        canvas_surface.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 70)))
+
+        panel = pygame.Rect(174, 150, 452, 480)
+        draw_panel(canvas_surface, panel, MENU_PANEL, accent_color=(110, 170, 255), radius=18)
+
+        # 音量
+        volume_label = subtitle_font.render(f"音量：{settings['volume']}", True, TEXT_COLOR)
+        canvas_surface.blit(volume_label, volume_rect.topleft)
+        draw_panel(canvas_surface, volume_slider, (30, 38, 50), border_color=(74, 82, 92), radius=8)
+        fill_w = int(volume_slider.width * settings["volume"] / 100)
+        if fill_w > 0:
+            pygame.draw.rect(canvas_surface, MENU_ACCENT, pygame.Rect(volume_slider.left, volume_slider.top, max(2, fill_w), volume_slider.height), border_radius=8)
+        knob_x = volume_slider.left + fill_w
+        pygame.draw.circle(canvas_surface, TEXT_COLOR, (knob_x, volume_slider.centery), 7)
+
+        # 特效品质
+        quality_label = subtitle_font.render("特效品质", True, TEXT_COLOR)
+        canvas_surface.blit(quality_label, (panel.left + 30, quality_high_rect.top - 30))
+        for name, rect in (("高", quality_high_rect), ("低", quality_low_rect)):
+            active = settings["effects_quality"] == ("high" if name == "高" else "low")
+            color = MENU_ACCENT if active else (MENU_BUTTON_HOVER if hover_name == ("quality_high" if name == "高" else "quality_low") else MENU_BUTTON)
+            draw_panel(canvas_surface, rect, color, border_color=(74, 82, 92), radius=10, shadow_offset=(1, 1))
+            label = body_font.render(name, True, TEXT_COLOR)
+            canvas_surface.blit(label, label.get_rect(center=rect.center))
+
+        # 跳过登场演出
+        entrance_color = MENU_BUTTON_HOVER if hover_name == "entrance" else MENU_BUTTON
+        draw_panel(canvas_surface, entrance_rect, entrance_color, border_color=(74, 82, 92), radius=10, shadow_offset=(1, 1))
+        entrance_text = body_font.render("跳过登场演出（开场直接开打）", True, TEXT_COLOR)
+        canvas_surface.blit(entrance_text, entrance_text.get_rect(center=(entrance_rect.centerx + 20, entrance_rect.centery)))
+        if settings.get("skip_entrance", False):
+            pygame.draw.circle(canvas_surface, (142, 226, 188), (entrance_rect.left + 22, entrance_rect.centery), 8)
+
+        # 全屏
+        fullscreen_color = MENU_BUTTON_HOVER if hover_name == "fullscreen" else MENU_BUTTON
+        draw_panel(canvas_surface, fullscreen_rect, fullscreen_color, border_color=(74, 82, 92), radius=10, shadow_offset=(1, 1))
+        fullscreen_text = body_font.render("全屏显示", True, TEXT_COLOR)
+        canvas_surface.blit(fullscreen_text, fullscreen_text.get_rect(center=(fullscreen_rect.centerx + 20, fullscreen_rect.centery)))
+        if settings.get("fullscreen", False):
+            pygame.draw.circle(canvas_surface, (142, 226, 188), (fullscreen_rect.left + 22, fullscreen_rect.centery), 8)
+
+        return_color = MENU_BUTTON_HOVER if hover_name == "return" else MENU_BUTTON
+        draw_panel(canvas_surface, return_rect, return_color, radius=12, shadow_offset=(2, 2))
+        return_text = button_font.render("返回", True, TEXT_COLOR)
+        canvas_surface.blit(return_text, return_text.get_rect(center=return_rect.center))
+
+        present_canvas(screen, canvas_surface, canvas_rect)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled=True, skip_entrance=False, low_effects=False):
     game_state = create_game_state(player_count, timed_weapon_orb_drops_enabled)
     scene_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     frame_surface = pygame.Surface((BATTLE_WINDOW_WIDTH, BATTLE_WINDOW_HEIGHT))
     sidebar_surface = pygame.Surface((BATTLE_SIDEBAR_WIDTH, BATTLE_WINDOW_HEIGHT))
     paused = False
     active_tab = "output"
+    speed_multiplier = 1.0
+    follow_character_id = None
+    follow_timer = 0.0
+    sidebar_rows = []
+    show_result_summary = False
+
+    if skip_entrance:
+        for character in game_state["characters"]:
+            character.spawn_fx_timer = 0.0
+    elif low_effects:
+        for character in game_state["characters"]:
+            character.spawn_fx_timer = min(character.spawn_fx_timer, 0.6)
+
+    top_three_jobs = set(get_top_three_jobs())
+    for character in game_state["characters"]:
+        character.gold_spawn_fx = character.job_name in top_three_jobs
+
+    for character in game_state["characters"]:
+        if character.is_soul_casket():
+            character.design_immobile = True
+            character.spawn_soul_blade(game_state)
+
+    global _LIVE_GAME_STATE, _LIVE_SPEED_MULTIPLIER
+    _LIVE_GAME_STATE = game_state
+    _LIVE_SPEED_MULTIPLIER = 1.0
+
+    battle_font = create_ui_font(20, bold=True)
+    result_title_font = create_ui_font(30, bold=True)
 
     while True:
+        _LIVE_GAME_STATE = game_state
+        _LIVE_SPEED_MULTIPLIER = speed_multiplier
+        game_state["_pause_flag"] = paused
         dt = clock.tick(FPS) / 1000.0
         mouse_pos = pygame.mouse.get_pos()
         end_button_rect = pygame.Rect(250, 610, 300, 74)
@@ -11949,13 +13088,28 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
         output_tab_rect = pygame.Rect(SCREEN_WIDTH + 16, 54, 128, 32)
         taken_tab_rect = pygame.Rect(SCREEN_WIDTH + 152, 54, 128, 32)
 
+        result_summary_rect = pygame.Rect(120, 320, 560, 300)
+        result_summary_close_rect = pygame.Rect(310, 560, 180, 40)
+        result_summary_toggle_rect = pygame.Rect(580, 640, 180, 36)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return None
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and not game_state["winner_text"]:
                 paused = not paused
+            if event.type == pygame.KEYDOWN and not game_state["winner_text"]:
+                if event.key == pygame.K_1:
+                    speed_multiplier = 1.0
+                elif event.key == pygame.K_2:
+                    speed_multiplier = 2.0
+                elif event.key == pygame.K_3:
+                    speed_multiplier = 4.0
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if output_tab_rect.collidepoint(event.pos):
+                if result_summary_close_rect.collidepoint(event.pos) and game_state["winner_text"] and show_result_summary:
+                    show_result_summary = False
+                elif result_summary_toggle_rect.collidepoint(event.pos) and game_state["winner_text"]:
+                    show_result_summary = not show_result_summary
+                elif output_tab_rect.collidepoint(event.pos):
                     active_tab = "output"
                 elif taken_tab_rect.collidepoint(event.pos):
                     active_tab = "taken"
@@ -11965,42 +13119,58 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
                     paused = False
                 elif paused and pause_button_rects["menu"].collidepoint(event.pos):
                     return "menu"
+                else:
+                    for row in sidebar_rows:
+                        if row["rect"].collidepoint(event.pos):
+                            follow_character_id = row["character"].id
+                            follow_timer = 2.5
+                            break
 
         if not paused and not game_state["winner_text"]:
-            game_state["elapsed_time"] += dt
-            update_weapon_orbs(game_state, dt)
-            living_characters = get_living_characters(game_state)
-            for character in living_characters:
-                character.update(dt, game_state)
-
-            for index, character in enumerate(living_characters):
-                for other in living_characters[index + 1 :]:
-                    character.resolve_overlap(other)
-            for shield_wall in game_state["shield_walls"]:
+            sim_dt = dt * speed_multiplier
+            steps = 1
+            if speed_multiplier >= 4.0:
+                steps = 2
+            for _ in range(steps):
+                game_state["elapsed_time"] += sim_dt
+                update_weapon_orbs(game_state, sim_dt)
+                living_characters = get_living_characters(game_state)
                 for character in living_characters:
-                    shield_wall.block_character(character)
+                    character.update(sim_dt, game_state)
 
-            for orb in game_state["weapon_orbs"]:
-                if not orb.alive:
-                    continue
-                for character in living_characters:
-                    if character.try_pickup_weapon(orb):
-                        break
+                for index, character in enumerate(living_characters):
+                    for other in living_characters[index + 1 :]:
+                        character.resolve_overlap(other)
+                for shield_wall in game_state["shield_walls"]:
+                    for character in living_characters:
+                        shield_wall.block_character(character)
 
-            update_world_lists(game_state, dt)
-            game_state["characters"] = [character for character in game_state["characters"] if character.alive]
-            living_characters = get_living_main_characters(game_state)
-            if len(living_characters) == 1:
-                winner = living_characters[0]
-                game_state["winner_text"] = f"Player {winner.id} ({winner.job_name}) Wins!"
-                game_state["winner_character"] = winner
-            elif len(living_characters) == 0:
-                game_state["winner_text"] = "No Winner"
-                game_state["winner_character"] = None
+                for orb in game_state["weapon_orbs"]:
+                    if not orb.alive:
+                        continue
+                    for character in living_characters:
+                        if character.try_pickup_weapon(orb):
+                            break
+
+                update_world_lists(game_state, sim_dt)
+                game_state["characters"] = [character for character in game_state["characters"] if character.alive]
+                living_characters = get_living_main_characters(game_state)
+                if len(living_characters) == 1:
+                    winner = living_characters[0]
+                    game_state["winner_text"] = f"Player {winner.id} ({winner.job_name}) Wins!"
+                    game_state["winner_character"] = winner
+                elif len(living_characters) == 0:
+                    game_state["winner_text"] = "No Winner"
+                    game_state["winner_character"] = None
+                if game_state["winner_text"]:
+                    break
 
         if game_state["winner_text"] and not game_state["result_recorded"]:
             record_win_rate_result(game_state)
             game_state["result_recorded"] = True
+
+        if follow_timer > 0:
+            follow_timer = max(0.0, follow_timer - dt)
 
         draw_grid(scene_surface)
         draw_ui(scene_surface, title_font, small_font, game_state)
@@ -12015,15 +13185,42 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             )
         else:
             offset = (0, 0)
+        if follow_character_id is not None and follow_timer > 0 and not game_state["winner_text"]:
+            follow_target = next((c for c in game_state["characters"] if c.id == follow_character_id and c.alive), None)
+            if follow_target is not None:
+                arena_center_x = ARENA_RECT.centerx
+                arena_center_y = ARENA_RECT.centery
+                dx = clamp((follow_target.pos.x - arena_center_x) * 0.55, -90.0, 90.0)
+                dy = clamp((follow_target.pos.y - arena_center_y) * 0.55, -70.0, 70.0)
+                offset = (offset[0] - round(dx), offset[1] - round(dy))
         frame_surface.blit(scene_surface, offset)
         if game_state["winner_text"]:
             draw_battle_end_button(frame_surface, button_font, end_button_rect.collidepoint(mouse_pos))
+            if show_result_summary:
+                draw_result_summary(
+                    frame_surface,
+                    result_title_font,
+                    battle_font,
+                    game_state,
+                    result_summary_rect,
+                    result_summary_close_rect,
+                )
+            summary_hover = result_summary_toggle_rect.collidepoint(mouse_pos)
+            toggle_color = MENU_BUTTON_HOVER if summary_hover else MENU_BUTTON
+            draw_panel(frame_surface, result_summary_toggle_rect, toggle_color, border_color=(74, 82, 92), radius=10, shadow_offset=(1, 1))
+            label = battle_font.render("查看结算" if not show_result_summary else "隐藏结算", True, TEXT_COLOR)
+            frame_surface.blit(label, label.get_rect(center=result_summary_toggle_rect.center))
         elif paused:
             pause_hover = next((name for name, rect in pause_button_rects.items() if rect.collidepoint(mouse_pos)), None)
             draw_pause_menu(frame_surface, title_font, small_font, button_font, pause_hover)
 
+        speed_badge = battle_font.render(f"速度 x{speed_multiplier:g}", True, (150, 214, 170))
+        badge_rect = speed_badge.get_rect(topright=(SCREEN_WIDTH - 14, 12))
+        draw_panel(frame_surface, badge_rect.inflate(14, 8), (22, 34, 30), border_color=(60, 90, 74), radius=8, shadow_offset=(1, 1))
+        frame_surface.blit(speed_badge, badge_rect)
+
         sidebar_surface.fill((10, 14, 20))
-        draw_battle_sidebar(
+        sidebar_rows = draw_battle_sidebar(
             sidebar_surface,
             title_font,
             small_font,
@@ -12031,6 +13228,7 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             game_state,
             active_tab,
             "output" if output_tab_rect.collidepoint(mouse_pos) else "taken" if taken_tab_rect.collidepoint(mouse_pos) else None,
+            follow_character_id,
         )
         frame_surface.blit(sidebar_surface, (SCREEN_WIDTH, 0))
         screen.blit(frame_surface, (0, 0))
@@ -12039,7 +13237,8 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), WINDOW_FLAGS)
+    menu_flags = WINDOW_FLAGS | (pygame.FULLSCREEN if GAME_SETTINGS.get("fullscreen") else 0)
+    screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), menu_flags)
     pygame.display.set_caption("Pygame Auto Battler")
     clock = pygame.time.Clock()
     title_font = create_ui_font(24, bold=True)
@@ -12067,11 +13266,30 @@ def main():
             if result is None:
                 break
             continue
+        if action == "settings":
+            result = settings_loop(screen, clock, title_font, subtitle_font, small_font, button_font)
+            if result is None:
+                break
+            continue
         player_count = menu_result[1]
         timed_weapon_orb_drops_enabled = not menu_result[2] if len(menu_result) > 2 else True
+        if GAME_SETTINGS.get("skip_entrance"):
+            apply_skip_entrance = True
+        else:
+            apply_skip_entrance = False
         screen = pygame.display.set_mode((BATTLE_WINDOW_WIDTH, BATTLE_WINDOW_HEIGHT), BATTLE_WINDOW_FLAGS)
-        result = battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled)
-        screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), WINDOW_FLAGS)
+        result = battle_loop(
+            screen,
+            clock,
+            title_font,
+            small_font,
+            button_font,
+            player_count,
+            timed_weapon_orb_drops_enabled,
+            skip_entrance=apply_skip_entrance,
+            low_effects=GAME_SETTINGS.get("effects_quality") == "low",
+        )
+        screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), menu_flags)
         if result is None:
             break
 

@@ -66,6 +66,8 @@ VISUAL_SHAPE_MAP = {
     "矮胖圆柱": "wide",
     "扩音器": "triangle",
     "宝箱形": "wide",
+    "斜十字": "cross_x",
+    "波浪形": "ring",
 }
 
 COLOR_MAP = {
@@ -180,6 +182,12 @@ ROLE_CONFIG_OVERRIDES = {
     101: {"skill_token": "tiger_roar", "mp_mode": "death_count", "mp_rate": 50.0, "attack_interval": 1.8},
     102: {"skill_token": "dragon_sweep", "mp_mode": "death_count", "mp_rate": 25.0, "attack_interval": 1.0},
     103: {"skill_token": "susanoo_ominous_raijin", "basic_damage_kind": "spell"},
+    104: {"skill_token": "ghost_fear", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 10.0},
+    105: {"skill_token": "flame_wheel", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 0.8},
+    106: {"skill_token": "abyss_eye", "basic_damage_kind": "spell", "mp_mode": "damage_taken_scaled", "mp_rate": 1.0},
+    107: {"skill_token": "mind_steal", "basic_damage_kind": "physical", "mp_mode": "distance_scaled", "mp_rate": 0.125},
+    108: {"skill_token": "rift_slash", "basic_damage_kind": "spell", "mp_mode": "distance_scaled", "mp_rate": 0.115},
+    109: {"skill_token": "soul_nine_slash", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 9.0, "attack_interval": 1.4},
 }
 
 
