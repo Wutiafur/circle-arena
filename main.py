@@ -729,6 +729,11 @@ SOUL_SLASH_CRIT_COLOR = (255, 208, 54)
 SOUL_BLADE_COLOR = (116, 176, 232)
 SOUL_BLADE_PHYSICAL_REDUCTION = 0.50
 SOUL_BLADE_TRUE_DAMAGE_INCREASE = 1.00
+# 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
+KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
+KILLSTREAK_GAIN_DURATION = 6.0
+KILLSTREAK_GAIN_DAMAGE = {1: 0.15, 2: 0.25, 3: 0.40}
+KILLSTREAK_GAIN_HEAL = {2: 0.15, 3: 0.25}
 RANGER_MARK_MAX = 3
 RANGER_MARK_DAMAGE_BONUS = 0.08
 RANGER_DASH_SPEED_DURATION = 0.5
@@ -3111,6 +3116,10 @@ POKEDEX_UI_TEXT = {
         "move_speed": "移动速度",
         "attack_type": "攻击类型",
         "attack_range": "攻击距离",
+        "attack_damage": "普攻伤害",
+        "attack_interval": "攻速",
+        "attack_tag": "伤害类型",
+        "attack_repeat": "连击次数",
         "physical_resistance": "物理抵抗",
         "spell_resistance": "法术抵抗",
         "mp_charge": "充能方式",
@@ -3130,6 +3139,7 @@ ATTACK_TYPE_LOCALIZATION = {
 def get_pokedex_data(key):
     data = CHARACTER_DATA[key]
     localized = POKEDEX_LOCALIZATION.get(key, {})
+    job_def = JOB_DEFS.get(key, {})
     return {
         **data,
         "job_name": key,
@@ -3140,6 +3150,10 @@ def get_pokedex_data(key):
         "display_passive_name": localized.get("passive_name", data.get("passive_name", "")),
         "display_passive_description": localized.get("passive_description", data.get("passive_description", "")),
         "display_attack_type": ATTACK_TYPE_LOCALIZATION.get(data["attack_type"], data["attack_type"]),
+        "display_attack_tag": get_role_attack_tag(key, data),
+        "attack_damage": float(job_def.get("attack_damage", 10.0)),
+        "attack_interval": float(job_def.get("attack_interval", 1.0)),
+        "attack_repeat": int(job_def.get("attack_repeat", 1) or 1),
         "physical_resistance": max(
             0.0,
             float(data.get("physical_resistance", JOB_RESISTANCE_PROFILES.get(key, {}).get("physical_resistance", 1.0))),
@@ -3684,6 +3698,10 @@ def build_pokedex_detail_surface(detail_panel, data, subtitle_font, body_font, s
         (POKEDEX_UI_TEXT["labels"]["max_hp"], str(data["max_hp"])),
         (POKEDEX_UI_TEXT["labels"]["move_speed"], str(int(data["move_speed"]))),
         (POKEDEX_UI_TEXT["labels"]["attack_type"], data["display_attack_type"]),
+        (POKEDEX_UI_TEXT["labels"]["attack_damage"], f"{data['attack_damage']:g}"),
+        (POKEDEX_UI_TEXT["labels"]["attack_interval"], f"{data['attack_interval']:.2f} 秒/次"),
+        (POKEDEX_UI_TEXT["labels"]["attack_tag"], data["display_attack_tag"]),
+        (POKEDEX_UI_TEXT["labels"]["attack_repeat"], f"x{data['attack_repeat']}" if data["attack_repeat"] > 1 else "单次"),
         (POKEDEX_UI_TEXT["labels"]["attack_range"], str(int(data["attack_range"]))),
         (POKEDEX_UI_TEXT["labels"]["physical_resistance"], f"{data['physical_resistance'] * 100:.0f}%"),
         (POKEDEX_UI_TEXT["labels"]["spell_resistance"], f"{data['spell_resistance'] * 100:.0f}%"),
@@ -7766,6 +7784,8 @@ class Character:
         self.design_shell_kill_count = 0
         self.kill_count = 0
         self.kill_streak = 0
+        self.killstreak_buff_level = 0
+        self.killstreak_buff_timer = 0.0
         # 104 幽灵祭司
         self.design_dread = 0
         self.design_dread_timer = 0.0
@@ -8248,6 +8268,8 @@ class Character:
             damage *= self.design_crit_multiplier
             self.design_crit_multiplier = 1.0
         damage *= 1.0 + self.design_collect_fervor * 0.2
+        if self.killstreak_buff_level > 0:
+            damage *= 1.0 + KILLSTREAK_GAIN_DAMAGE.get(self.killstreak_buff_level, 0.0)
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -9462,6 +9484,13 @@ class Character:
                                 KILLSTREAK_BANNERS[source_character.kill_streak],
                             )
                         )
+                    buff_level = KILLSTREAK_GAIN_THRESHOLDS.get(source_character.kill_streak)
+                    if buff_level is not None:
+                        source_character.killstreak_buff_level = max(source_character.killstreak_buff_level, buff_level)
+                        source_character.killstreak_buff_timer = KILLSTREAK_GAIN_DURATION
+                        heal_ratio = KILLSTREAK_GAIN_HEAL.get(buff_level, 0.0)
+                        if heal_ratio > 0:
+                            source_character.heal(source_character.max_hp * heal_ratio)
                 self.kill_streak = 0
         if damage > 0:
             if count_on_damage_dealt and source_character is not None and source_character.owner_id != self.owner_id:
@@ -10538,6 +10567,10 @@ class Character:
                     if timer > 0:
                         updated.append(timer)
                 self.sea_tide_reduction_timers = updated
+        if self.killstreak_buff_timer > 0:
+            self.killstreak_buff_timer = max(0.0, self.killstreak_buff_timer - dt)
+            if self.killstreak_buff_timer <= 0:
+                self.killstreak_buff_level = 0
         if self.is_windstorm_fox():
             self.windstorm_idle_timer += dt
             if self.windstorm_physical_resistance_timer > 0:
@@ -11596,7 +11629,7 @@ class Character:
 
 def spawn_characters(count, arena_rect):
     characters = []
-    job_names = list(JOB_DEFS.keys())
+    job_names = get_battle_job_names()
     attempts = 0
     while len(characters) < count and attempts < 600:
         attempts += 1
@@ -11837,7 +11870,7 @@ def draw_world(surface, game_state, label_font):
         banner.draw(surface, label_font)
 
 
-def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops):
+def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops, disabled_count=0):
     screen.fill(BACKGROUND_COLOR)
 
     # 背景装饰：竞技场网格 + 中央圆环光环
@@ -11869,10 +11902,12 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     panel_rect = pygame.Rect(174, 176, 452, 290)
     decrement_rect = pygame.Rect(232, 258, 60, 60)
     increment_rect = pygame.Rect(508, 258, 60, 60)
-    start_rect = pygame.Rect(244, 492, 312, 72)
-    pokedex_rect = pygame.Rect(244, 576, 312, 60)
-    effects_rect = pygame.Rect(244, 646, 312, 52)
-    win_rate_rect = pygame.Rect(244, 710, 312, 44)
+    start_rect = pygame.Rect(244, 476, 312, 68)
+    pokedex_rect = pygame.Rect(244, 556, 150, 50)
+    duel_rect = pygame.Rect(402, 556, 150, 50)
+    effects_rect = pygame.Rect(244, 614, 150, 50)
+    ban_rect = pygame.Rect(402, 614, 150, 50)
+    win_rate_rect = pygame.Rect(244, 672, 312, 46)
     settings_rect = pygame.Rect(558, 352, 118, 34)
     weapon_drops_rect = pygame.Rect(244, 356, 300, 28)
     weapon_checkbox_rect = pygame.Rect(244, 356, 20, 20)
@@ -11887,7 +11922,9 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     plus_color = MENU_BUTTON_HOVER if hover_name == "plus" else MENU_BUTTON
     start_color = MENU_BUTTON_HOVER if hover_name == "start" else MENU_ACCENT
     pokedex_color = MENU_BUTTON_HOVER if hover_name == "pokedex" else MENU_BUTTON
+    duel_color = MENU_BUTTON_HOVER if hover_name == "duel" else MENU_BUTTON
     effects_color = MENU_BUTTON_HOVER if hover_name == "effects" else MENU_BUTTON
+    ban_color = MENU_BUTTON_HOVER if hover_name == "ban" else MENU_BUTTON
     win_rate_color = MENU_BUTTON_HOVER if hover_name == "win_rate" else MENU_BUTTON
     settings_color = MENU_BUTTON_HOVER if hover_name == "settings" else MENU_BUTTON
 
@@ -11900,8 +11937,10 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     draw_panel(screen, increment_rect, plus_color, radius=12, shadow_offset=(2, 2))
     draw_panel(screen, start_rect, start_color, radius=14, shadow_offset=(3, 4), accent_color=(255, 214, 120))
     draw_panel(screen, pokedex_rect, pokedex_color, radius=12, shadow_offset=(2, 3))
+    draw_panel(screen, duel_rect, duel_color, radius=12, shadow_offset=(2, 3))
     draw_panel(screen, settings_rect, settings_color, radius=8, shadow_offset=(1, 1))
     draw_panel(screen, effects_rect, effects_color, radius=12, shadow_offset=(2, 3))
+    draw_panel(screen, ban_rect, ban_color, radius=12, shadow_offset=(2, 3))
     draw_panel(screen, win_rate_rect, win_rate_color, radius=12, shadow_offset=(2, 3))
 
     # 开始按钮 ▶ 图标 + 文案
@@ -11911,7 +11950,13 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     screen.blit(start_text, start_text.get_rect(center=(start_rect.centerx + 6, start_rect.centery)))
 
     # 图鉴 / 效果 / 胜率 按钮：左侧彩色圆点
-    icon_dots = ((pokedex_rect, (110, 170, 255)), (effects_rect, (142, 226, 188)), (win_rate_rect, (255, 214, 120)))
+    icon_dots = (
+        (pokedex_rect, (110, 170, 255)),
+        (duel_rect, (255, 158, 96)),
+        (effects_rect, (142, 226, 188)),
+        (ban_rect, (232, 96, 96)),
+        (win_rate_rect, (255, 214, 120)),
+    )
     for rect, dot_color in icon_dots:
         pygame.draw.circle(screen, dot_color, (rect.left + 18, rect.centery), 6)
         pygame.draw.circle(screen, BORDER_COLOR, (rect.left + 18, rect.centery), 6, 1)
@@ -11919,12 +11964,16 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     minus_text = title_font.render("-", True, TEXT_COLOR)
     plus_text = title_font.render("+", True, TEXT_COLOR)
     pokedex_text = button_font.render(POKEDEX_UI_TEXT["menu_button"], True, TEXT_COLOR)
+    duel_text = subtitle_font.render("擂台模式", True, TEXT_COLOR)
     effects_text = subtitle_font.render(EFFECT_UI_TEXT["menu_button"], True, TEXT_COLOR)
+    ban_text = subtitle_font.render(f"禁用角色 ({disabled_count}/3)", True, TEXT_COLOR)
     win_rate_text = subtitle_font.render("胜率", True, TEXT_COLOR)
     screen.blit(minus_text, minus_text.get_rect(center=decrement_rect.center))
     screen.blit(plus_text, plus_text.get_rect(center=increment_rect.center))
     screen.blit(pokedex_text, pokedex_text.get_rect(center=(pokedex_rect.centerx + 8, pokedex_rect.centery)))
+    screen.blit(duel_text, duel_text.get_rect(center=(duel_rect.centerx + 8, duel_rect.centery)))
     screen.blit(effects_text, effects_text.get_rect(center=(effects_rect.centerx + 8, effects_rect.centery)))
+    screen.blit(ban_text, ban_text.get_rect(center=(ban_rect.centerx + 8, ban_rect.centery)))
     screen.blit(win_rate_text, win_rate_text.get_rect(center=(win_rate_rect.centerx + 8, win_rate_rect.centery)))
 
     hint = subtitle_font.render(f"最少 {MIN_CHARACTERS} 人，最多 {MAX_CHARACTERS} 人", True, (150, 164, 180))
@@ -11959,7 +12008,9 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
         "plus": increment_rect,
         "start": start_rect,
         "pokedex": pokedex_rect,
+        "duel": duel_rect,
         "effects": effects_rect,
+        "ban": ban_rect,
         "win_rate": win_rate_rect,
         "settings": settings_rect,
         "weapon_drops": weapon_drops_rect,
@@ -11970,10 +12021,12 @@ def get_menu_button_rects():
     return {
         "minus": pygame.Rect(232, 258, 60, 60),
         "plus": pygame.Rect(508, 258, 60, 60),
-        "start": pygame.Rect(244, 492, 312, 72),
-        "pokedex": pygame.Rect(244, 576, 312, 60),
-        "effects": pygame.Rect(244, 646, 312, 52),
-        "win_rate": pygame.Rect(244, 710, 312, 44),
+        "start": pygame.Rect(244, 476, 312, 68),
+        "pokedex": pygame.Rect(244, 556, 150, 50),
+        "duel": pygame.Rect(402, 556, 150, 50),
+        "effects": pygame.Rect(244, 614, 150, 50),
+        "ban": pygame.Rect(402, 614, 150, 50),
+        "win_rate": pygame.Rect(244, 672, 312, 46),
         "settings": pygame.Rect(558, 352, 118, 34),
         "weapon_drops": pygame.Rect(244, 356, 300, 28),
     }
@@ -11997,35 +12050,33 @@ def draw_result_summary(surface, title_font, body_font, game_state, panel_rect, 
 
     winner = game_state.get("winner_character")
     title = title_font.render("本局结算", True, TEXT_COLOR)
-    surface.blit(title, title.get_rect(center=(panel_rect.centerx, panel_rect.top + 30)))
+    surface.blit(title, title.get_rect(center=(panel_rect.centerx, panel_rect.top + 28)))
 
     participants = list(game_state.get("battle_participants", game_state.get("characters", [])))
     alive_winner = winner if winner is not None and winner.alive else (next((c for c in participants if c.alive), None))
 
     # 冠军卡
     if alive_winner is not None:
-        champ_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 58, panel_rect.width - 48, 64)
+        champ_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 52, panel_rect.width - 48, 58)
         draw_panel(surface, champ_rect, (30, 38, 50), accent_color=(255, 214, 120), radius=10, shadow_offset=(2, 2))
         draw_shape_icon(surface, alive_winner.shape, alive_winner.color, (champ_rect.left + 32, champ_rect.centery), 20)
         name = body_font.render(f"冠军：{get_character_display_name(alive_winner)}", True, TEXT_COLOR)
-        surface.blit(name, (champ_rect.left + 66, champ_rect.top + 8))
+        surface.blit(name, (champ_rect.left + 66, champ_rect.top + 6))
         stats_line = body_font.render(
             f"伤害 {int(alive_winner.damageDealt)}    承伤 {int(alive_winner.damageTaken)}    击杀 {int(getattr(alive_winner, 'kill_count', 0))}",
             True,
             (150, 214, 170),
         )
-        surface.blit(stats_line, (champ_rect.left + 66, champ_rect.top + 36))
+        surface.blit(stats_line, (champ_rect.left + 66, champ_rect.top + 32))
 
     # Top 3 排行
-    col_widths = (150, 150, 150)
     cols = [
         ("伤害榜", "damageDealt", (220, 72, 72)),
         ("承伤榜", "damageTaken", (84, 150, 255)),
         ("击杀榜", "kill_count", (255, 214, 120)),
     ]
-    col_x = panel_rect.left + 18
     for col_index, (label, attr, color) in enumerate(cols):
-        col_rect = pygame.Rect(panel_rect.left + 18 + col_index * 178, panel_rect.top + 134, 166, 150)
+        col_rect = pygame.Rect(panel_rect.left + 18 + col_index * 178, panel_rect.top + 122, 166, 158)
         draw_panel(surface, col_rect, (24, 30, 40), border_color=(60, 70, 84), radius=10, shadow_offset=(1, 2))
         header = body_font.render(label, True, color)
         surface.blit(header, header.get_rect(center=(col_rect.centerx, col_rect.top + 18)))
@@ -12033,7 +12084,7 @@ def draw_result_summary(surface, title_font, body_font, game_state, panel_rect, 
         for rank, character in enumerate(ranked[:3]):
             if character is None:
                 continue
-            item_y = col_rect.top + 42 + rank * 36
+            item_y = col_rect.top + 42 + rank * 38
             rank_color = (255, 214, 120) if rank == 0 else (200, 208, 220)
             rank_text = body_font.render(f"{rank + 1}.", True, rank_color)
             surface.blit(rank_text, (col_rect.left + 10, item_y))
@@ -12046,10 +12097,25 @@ def draw_result_summary(surface, title_font, body_font, game_state, panel_rect, 
     # MVP
     best = max(participants, key=lambda character: float(getattr(character, "damageDealt", 0.0) or 0.0), default=None)
     if best is not None:
-        mvp_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 296, panel_rect.width - 48, 40)
+        mvp_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 292, panel_rect.width - 48, 40)
         draw_panel(surface, mvp_rect, (30, 36, 44), border_color=(74, 82, 92), radius=8, shadow_offset=(1, 1))
         mvp_text = body_font.render(f"MVP：{get_character_display_name(best)}（最高输出 {int(best.damageDealt)}）", True, (150, 214, 170))
         surface.blit(mvp_text, mvp_text.get_rect(center=(panel_rect.centerx, panel_rect.centery - 18)))
+
+    # 押注结果
+    bet_job = game_state.get("bet_job")
+    if bet_job:
+        bet_rect = pygame.Rect(panel_rect.left + 24, panel_rect.top + 340, panel_rect.width - 48, 38)
+        bet_winner = alive_winner is not None and alive_winner.job_name == bet_job
+        fill = (36, 52, 44) if bet_winner else (46, 40, 34)
+        border = (120, 210, 160) if bet_winner else (190, 150, 90)
+        draw_panel(surface, bet_rect, fill, border_color=border, radius=8, shadow_offset=(1, 1))
+        if bet_winner:
+            bet_text = body_font.render(f"🏆 押注命中！{get_character_display_name(alive_winner)} 如你所料", True, (255, 214, 120))
+        else:
+            bet_name = get_pokedex_data(bet_job).get("display_name", bet_job)
+            bet_text = body_font.render(f"押注落空：你押的是 {bet_name}", True, (200, 208, 220))
+        surface.blit(bet_text, bet_text.get_rect(center=bet_rect.center))
 
     draw_panel(surface, close_rect, MENU_BUTTON_HOVER, radius=10, shadow_offset=(2, 2))
     close_text = body_font.render("关闭", True, TEXT_COLOR)
@@ -12659,6 +12725,10 @@ def main_menu(screen, clock, title_font, subtitle_font, button_font):
                     return ("battle", player_count, disable_timed_weapon_drops)
                 elif button_rects["pokedex"].collidepoint(mapped_pos):
                     return ("pokedex", None)
+                elif button_rects["duel"].collidepoint(mapped_pos):
+                    return ("duel", None)
+                elif button_rects["ban"].collidepoint(mapped_pos):
+                    return ("ban", None)
                 elif button_rects["effects"].collidepoint(mapped_pos):
                     return ("effects", None)
                 elif button_rects["win_rate"].collidepoint(mapped_pos):
@@ -12669,13 +12739,17 @@ def main_menu(screen, clock, title_font, subtitle_font, button_font):
         mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
         hover_name = next((name for name, rect in button_rects.items() if mouse_pos is not None and rect.collidepoint(mouse_pos)), None)
         canvas_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        draw_menu(canvas_surface, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops)
+        draw_menu(canvas_surface, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops, disabled_count=len(_DISABLED_ROLE_KEYS))
         present_canvas(screen, canvas_surface, canvas_rect)
         pygame.display.flip()
         clock.tick(FPS)
 
 
 _POKEDEX_LAST_SELECTED = None
+
+# 禁用角色表（主菜单"禁用角色"设置，最多 3 个），按 job_name 存放
+_DISABLED_ROLE_KEYS = set()
+_DISABLED_ROLE_MAX = 3
 
 
 def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
@@ -12818,6 +12892,373 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
         detail_scroll_offset = int(clamp(detail_scroll_offset, 0, detail_max_scroll))
         pygame.display.flip()
         clock.tick(FPS)
+
+
+MAX_DISABLED_ROLES = 3
+
+
+def toggle_disabled_role(job_name):
+    if job_name in _DISABLED_ROLE_KEYS:
+        _DISABLED_ROLE_KEYS.discard(job_name)
+        return True
+    if len(_DISABLED_ROLE_KEYS) >= MAX_DISABLED_ROLES:
+        return False
+    _DISABLED_ROLE_KEYS.add(job_name)
+    return True
+
+
+def get_battle_job_names():
+    names = [job for job in JOB_DEFS.keys() if job not in _DISABLED_ROLE_KEYS]
+    return names or list(JOB_DEFS.keys())
+
+
+def ban_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
+    ordered_names = get_pokedex_ordered_names()
+    grid_left, grid_top = 28, 138
+    cols = 6
+    cell_w, cell_h = 122, 56
+    grid_panel = pygame.Rect(16, 120, SCREEN_WIDTH - 32, 620)
+    rows_visible = (grid_panel.height - 20) // cell_h
+    scroll_row = 0
+
+    def visible_names():
+        start = scroll_row * cols
+        return ordered_names[start : start + rows_visible * cols]
+
+    while True:
+        canvas_rect, device_pixel_ratio = get_window_transform(screen)
+        mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+        cell_rects = {}
+        visible = visible_names()
+        for index, name in enumerate(visible):
+            col = index % cols
+            row = index // cols
+            rect = pygame.Rect(grid_left + col * (cell_w + 8), grid_top + row * (cell_h + 8), cell_w, cell_h)
+            cell_rects[name] = rect
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((max(1, event.w), max(1, event.h)), WINDOW_FLAGS)
+                canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is None:
+                    continue
+                if pygame.Rect(244, 754, 312, 36).collidepoint(mapped_pos):
+                    return "menu"
+                for name, rect in cell_rects.items():
+                    if rect.collidepoint(mapped_pos):
+                        toggle_disabled_role(name)
+                        break
+            if event.type == pygame.MOUSEWHEEL:
+                hover_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+                if hover_pos is not None and grid_panel.collidepoint(hover_pos):
+                    scroll_row = int(clamp(scroll_row - event.y, 0, max(0, (len(ordered_names) + cols - 1) // cols - rows_visible)))
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "menu"
+
+        canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        canvas.fill(BACKGROUND_COLOR)
+        for gx in range(0, SCREEN_WIDTH, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (gx, 0), (gx, SCREEN_HEIGHT), 1)
+        for gy in range(0, SCREEN_HEIGHT, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
+        title = title_font.render(f"禁用角色（{len(_DISABLED_ROLE_KEYS)}/{MAX_DISABLED_ROLES}）：被禁角色不会出现在自动对战中", True, TEXT_COLOR)
+        canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 66)))
+        hint = subtitle_font.render("点击切换禁用，最多 3 个 · 滚轮滚动 · Esc 返回", True, (150, 164, 180))
+        canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 96)))
+        draw_panel(canvas, grid_panel, (16, 22, 30), radius=14)
+
+        for name, rect in cell_rects.items():
+            data = CHARACTER_DATA.get(name, {})
+            disabled = name in _DISABLED_ROLE_KEYS
+            fill = (52, 30, 34) if disabled else (24, 30, 40)
+            border = (232, 96, 96) if disabled else (60, 70, 84)
+            draw_panel(canvas, rect, fill, border_color=border, radius=8, shadow_offset=(1, 1))
+            draw_shape_icon(canvas, data.get("shape", "circle"), data.get("color", (180, 180, 180)), (rect.left + 20, rect.centery), 9)
+            label = body_font.render(truncate_text(get_pokedex_data(name).get("display_name", name), body_font, rect.width - 40), True, TEXT_COLOR)
+            canvas.blit(label, (rect.left + 34, rect.top + 6))
+            detail = subtitle_font.render(f"#{get_role_display_number(name)}", True, (150, 164, 180))
+            canvas.blit(detail, (rect.left + 34, rect.top + 26))
+            if disabled:
+                cross = button_font.render("✕", True, (255, 120, 110))
+                canvas.blit(cross, cross.get_rect(topright=(rect.right - 10, rect.top + 4)))
+
+        back_rect = pygame.Rect(244, 754, 312, 36)
+        draw_panel(canvas, back_rect, MENU_BUTTON_HOVER if mouse_pos is not None and back_rect.collidepoint(mouse_pos) else MENU_BUTTON, radius=10, shadow_offset=(2, 2))
+        back_text = subtitle_font.render("返回主菜单", True, TEXT_COLOR)
+        canvas.blit(back_text, back_text.get_rect(center=back_rect.center))
+        present_canvas(screen, canvas, canvas_rect)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def bet_loop(screen, clock, title_font, subtitle_font, body_font, button_font, game_state):
+    characters = [c for c in game_state.get("battle_participants", game_state.get("characters", [])) if c.alive]
+    if not characters:
+        return "skip"
+    grid_left, grid_top = 28, 150
+    cols = 5
+    cell_w, cell_h = 142, 62
+    grid_panel = pygame.Rect(16, 132, SCREEN_WIDTH - 32, 590)
+    rows_visible = (grid_panel.height - 20) // cell_h
+    scroll_row = 0
+
+    def visible_chars():
+        start = scroll_row * cols
+        return characters[start : start + rows_visible * cols]
+
+    while True:
+        canvas_rect, device_pixel_ratio = get_window_transform(screen)
+        mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+        cell_rects = {}
+        visible = visible_chars()
+        for index, char in enumerate(visible):
+            col = index % cols
+            row = index // cols
+            rect = pygame.Rect(grid_left + col * (cell_w + 10), grid_top + row * (cell_h + 10), cell_w, cell_h)
+            cell_rects[id(char)] = rect
+
+        skip_rect = pygame.Rect(180, 744, 200, 36)
+        cancel_rect = pygame.Rect(420, 744, 200, 36)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((max(1, event.w), max(1, event.h)), WINDOW_FLAGS)
+                canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is None:
+                    continue
+                if skip_rect.collidepoint(mapped_pos):
+                    return "skip"
+                if cancel_rect.collidepoint(mapped_pos):
+                    return "cancel"
+                for cid, rect in cell_rects.items():
+                    if rect.collidepoint(mapped_pos):
+                        return next(c.job_name for c in visible if id(c) == cid)
+            if event.type == pygame.MOUSEWHEEL:
+                hover_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+                if hover_pos is not None and grid_panel.collidepoint(hover_pos):
+                    scroll_row = int(clamp(scroll_row - event.y, 0, max(0, (len(characters) + cols - 1) // cols - rows_visible)))
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "cancel"
+
+        canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        canvas.fill(BACKGROUND_COLOR)
+        for gx in range(0, SCREEN_WIDTH, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (gx, 0), (gx, SCREEN_HEIGHT), 1)
+        for gy in range(0, SCREEN_HEIGHT, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
+        title = title_font.render("入场押注：猜本局冠军！猜中结算送上冠军称号", True, TEXT_COLOR)
+        canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 66)))
+        hint = subtitle_font.render("点击角色头像押注 · 滚轮滚动 · 也可跳过或返回", True, (150, 164, 180))
+        canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 100)))
+        draw_panel(canvas, grid_panel, (16, 22, 30), radius=14)
+
+        for char in visible:
+            rect = cell_rects[id(char)]
+            data = get_pokedex_data(char.job_name)
+            draw_panel(canvas, rect, (24, 30, 40), border_color=(60, 70, 84), radius=8, shadow_offset=(1, 1))
+            draw_shape_icon(canvas, data.get("shape", "circle"), data.get("color", (180, 180, 180)), (rect.left + 24, rect.top + 24), 12)
+            name = body_font.render(truncate_text(data.get("display_name", char.job_name), body_font, rect.width - 56), True, TEXT_COLOR)
+            canvas.blit(name, (rect.left + 50, rect.top + 8))
+            num = subtitle_font.render(f"#{get_role_display_number(char.job_name)}", True, (150, 164, 180))
+            canvas.blit(num, (rect.left + 50, rect.top + 30))
+            tag = subtitle_font.render(data.get("display_attack_tag", ""), True, (180, 200, 230))
+            canvas.blit(tag, (rect.left + 50, rect.top + 44))
+
+        for rect, text in ((skip_rect, "不押注，直接战斗"), (cancel_rect, "返回主菜单")):
+            hover = mouse_pos is not None and rect.collidepoint(mouse_pos)
+            draw_panel(canvas, rect, MENU_BUTTON_HOVER if hover else MENU_BUTTON, radius=10, shadow_offset=(2, 2))
+            label = subtitle_font.render(text, True, TEXT_COLOR)
+            canvas.blit(label, label.get_rect(center=rect.center))
+
+        present_canvas(screen, canvas, canvas_rect)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
+    ordered_names = get_pokedex_ordered_names()
+    selection = {"a": None, "b": None}
+    scroll = {"a": 0, "b": 0}
+    list_top, list_h, row_h = 156, 560, 56
+
+    def visible_names(key):
+        start = scroll[key]
+        return ordered_names[start : start + list_h // row_h]
+
+    while True:
+        canvas_rect, device_pixel_ratio = get_window_transform(screen)
+        mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+        row_rects = {"a": {}, "b": {}}
+        for side, left in (("a", 36), ("b", 424)):
+            for index, name in enumerate(visible_names(side)):
+                row_rects[side][name] = pygame.Rect(left, list_top + index * row_h, 340, row_h - 6)
+        start_rect = pygame.Rect(244, 736, 312, 44)
+        back_rect = pygame.Rect(244, 790, 312, 40)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((max(1, event.w), max(1, event.h)), WINDOW_FLAGS)
+                canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is None:
+                    continue
+                if back_rect.collidepoint(mapped_pos):
+                    return "menu"
+                if start_rect.collidepoint(mapped_pos) and selection["a"] and selection["b"]:
+                    return _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, selection["a"], selection["b"])
+                for side in ("a", "b"):
+                    for name, rect in row_rects[side].items():
+                        if rect.collidepoint(mapped_pos):
+                            selection[side] = None if selection[side] == name else name
+                            break
+            if event.type == pygame.MOUSEWHEEL:
+                hover_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+                for side, left in (("a", 36), ("b", 424)):
+                    panel_rect = pygame.Rect(left - 4, list_top - 30, 348, list_h + 34)
+                    if hover_pos is not None and panel_rect.collidepoint(hover_pos):
+                        scroll[side] = int(clamp(scroll[side] - event.y, 0, max(0, len(ordered_names) - list_h // row_h)))
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "menu"
+
+        canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        canvas.fill(BACKGROUND_COLOR)
+        for gx in range(0, SCREEN_WIDTH, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (gx, 0), (gx, SCREEN_HEIGHT), 1)
+        for gy in range(0, SCREEN_HEIGHT, 40):
+            pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
+        title = title_font.render("1v1 擂台：左选挑战者，右选对手", True, TEXT_COLOR)
+        canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 64)))
+        hint = subtitle_font.render("滚轮滚动列表 · Esc 返回", True, (150, 164, 180))
+        canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 100)))
+
+        for side, left in (("a", 36), ("b", 424)):
+            panel_rect = pygame.Rect(left - 4, list_top - 30, 348, list_h + 34)
+            draw_panel(canvas, panel_rect, (16, 22, 30), radius=12)
+            side_label = subtitle_font.render("挑战者 A" if side == "a" else "对手 B", True, (150, 214, 170) if side == "a" else (255, 158, 96))
+            canvas.blit(side_label, side_label.get_rect(center=(left + 170, list_top - 16)))
+            for name, rect in row_rects[side].items():
+                data = get_pokedex_data(name)
+                selected = selection[side] == name
+                fill = (44, 58, 80) if selected else (24, 30, 40)
+                border = MENU_ACCENT if selected else (60, 70, 84)
+                draw_panel(canvas, rect, fill, border_color=border, radius=8, shadow_offset=(1, 1))
+                draw_shape_icon(canvas, data.get("shape", "circle"), data.get("color", (180, 180, 180)), (rect.left + 20, rect.centery), 10)
+                label = body_font.render(truncate_text(data.get("display_name", name), body_font, rect.width - 90), True, TEXT_COLOR)
+                canvas.blit(label, (rect.left + 40, rect.top + 6))
+                num = subtitle_font.render(f"#{get_role_display_number(name)} · {data.get('display_attack_tag', '')}", True, (150, 164, 180))
+                canvas.blit(num, (rect.left + 40, rect.top + 28))
+                if selected:
+                    mark = button_font.render("✔", True, (120, 210, 160))
+                    canvas.blit(mark, mark.get_rect(center=(rect.right - 20, rect.centery)))
+
+        ready = bool(selection["a"] and selection["b"])
+        draw_panel(canvas, start_rect, (255, 214, 120) if ready else MENU_BUTTON_DISABLED, radius=10, shadow_offset=(2, 2))
+        start_text = button_font.render("开始对战", True, TEXT_COLOR) if ready else subtitle_font.render("请先选择双方角色", True, (150, 164, 180))
+        canvas.blit(start_text, start_text.get_rect(center=start_rect.center))
+        draw_panel(canvas, back_rect, MENU_BUTTON_HOVER if mouse_pos is not None and back_rect.collidepoint(mouse_pos) else MENU_BUTTON, radius=10, shadow_offset=(2, 2))
+        back_text = subtitle_font.render("返回主菜单", True, TEXT_COLOR)
+        canvas.blit(back_text, back_text.get_rect(center=back_rect.center))
+
+        present_canvas(screen, canvas, canvas_rect)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, job_a, job_b):
+    gs = create_game_state(2, timed_weapon_orb_drops_enabled=False)
+    gs["timed_weapon_orb_drops_enabled"] = False
+    a = Character(job_a, 1, pygame.Vector2(ARENA_RECT.left + 180, ARENA_RECT.centery))
+    b = Character(job_b, 2, pygame.Vector2(ARENA_RECT.right - 180, ARENA_RECT.centery))
+    gs["characters"] = [a, b]
+    gs["battle_participants"] = [a, b]
+    for char in (a, b):
+        char.spawn_fx_timer = 0.0
+        if char.is_soul_casket():
+            char.design_immobile = True
+            char.spawn_soul_blade(gs)
+    scene_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    result_text = ""
+    result_color = (255, 214, 120)
+    battle_font = create_ui_font(22, bold=True)
+
+    while True:
+        dt = clock.tick(FPS) / 1000.0
+        mouse_pos = pygame.mouse.get_pos()
+        rematch_rect = pygame.Rect(180, 700, 200, 44)
+        back_rect = pygame.Rect(420, 700, 200, 44)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "menu"
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN and result_text:
+                return _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, job_a, job_b)
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if result_text and rematch_rect.collidepoint(event.pos):
+                    return _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, job_a, job_b)
+                if result_text and back_rect.collidepoint(event.pos):
+                    return "menu"
+
+        if not result_text:
+            living = [c for c in gs["characters"] if c.alive]
+            if len(living) <= 1:
+                winner = living[0] if living else None
+                if winner is None:
+                    result_text = "同归于尽！"
+                    result_color = (200, 208, 220)
+                else:
+                    loser = a if winner is b else b
+                    result_text = f"{get_character_display_name(winner)} 击败了 {get_character_display_name(loser)}！"
+                    result_color = (255, 214, 120)
+            else:
+                gs["elapsed_time"] += dt
+                for character in living:
+                    character.update(dt, gs)
+                for index, character in enumerate(living):
+                    for other in living[index + 1 :]:
+                        character.resolve_overlap(other)
+                update_world_lists(gs, dt)
+                gs["characters"] = [c for c in gs["characters"] if c.alive]
+
+        draw_grid(scene_surface)
+        draw_ui(scene_surface, title_font, body_font, gs)
+        pygame.draw.rect(scene_surface, BORDER_COLOR, ARENA_RECT, 3)
+        draw_world(scene_surface, gs, body_font)
+        if result_text:
+            end_panel = pygame.Rect(140, 300, 520, 130)
+            draw_panel(scene_surface, end_panel, MENU_PANEL, accent_color=(255, 214, 120), radius=16, shadow_offset=(3, 4))
+            result_surface = battle_font.render(result_text, True, result_color)
+            scene_surface.blit(result_surface, result_surface.get_rect(center=(end_panel.centerx, 336)))
+            for index, char in enumerate((a, b)):
+                stat_line = body_font.render(
+                    f"{get_character_display_name(char)}：伤害 {int(char.damageDealt)} · 承伤 {int(char.damageTaken)}" + (" · 存活" if char.alive else " · 战败"),
+                    True,
+                    (196, 208, 224),
+                )
+                scene_surface.blit(stat_line, (end_panel.left + 40, 362 + index * 26))
+            rematch_hover = rematch_rect.collidepoint(mouse_pos)
+            back_hover = back_rect.collidepoint(mouse_pos)
+            draw_panel(scene_surface, rematch_rect, MENU_BUTTON_HOVER if rematch_hover else MENU_ACCENT, radius=10, shadow_offset=(2, 2))
+            draw_panel(scene_surface, back_rect, MENU_BUTTON_HOVER if back_hover else MENU_BUTTON, radius=10, shadow_offset=(2, 2))
+            rematch_label = body_font.render("再来一局", True, TEXT_COLOR)
+            back_label = body_font.render("返回", True, TEXT_COLOR)
+            scene_surface.blit(rematch_label, rematch_label.get_rect(center=rematch_rect.center))
+            scene_surface.blit(back_label, back_label.get_rect(center=back_rect.center))
+        screen.blit(scene_surface, (0, 0))
+        pygame.display.flip()
 
 
 def effectdex_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
@@ -13082,8 +13523,11 @@ def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
         clock.tick(FPS)
 
 
-def battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled=True, skip_entrance=False, low_effects=False):
-    game_state = create_game_state(player_count, timed_weapon_orb_drops_enabled)
+def battle_loop(screen, clock, title_font, small_font, button_font, player_count, timed_weapon_orb_drops_enabled=True, skip_entrance=False, low_effects=False, game_state=None, bet_job=None):
+    if game_state is None:
+        game_state = create_game_state(player_count, timed_weapon_orb_drops_enabled)
+    if bet_job is not None:
+        game_state["bet_job"] = bet_job
     scene_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     frame_surface = pygame.Surface((BATTLE_WINDOW_WIDTH, BATTLE_WINDOW_HEIGHT))
     sidebar_surface = pygame.Surface((BATTLE_SIDEBAR_WIDTH, BATTLE_WINDOW_HEIGHT))
@@ -13132,8 +13576,8 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
         output_tab_rect = pygame.Rect(SCREEN_WIDTH + 16, 54, 128, 32)
         taken_tab_rect = pygame.Rect(SCREEN_WIDTH + 152, 54, 128, 32)
 
-        result_summary_rect = pygame.Rect(120, 320, 560, 300)
-        result_summary_close_rect = pygame.Rect(310, 560, 180, 40)
+        result_summary_rect = pygame.Rect(120, 300, 560, 420)
+        result_summary_close_rect = pygame.Rect(310, 664, 180, 40)
         result_summary_toggle_rect = pygame.Rect(580, 640, 180, 36)
 
         for event in pygame.event.get():
@@ -13142,11 +13586,11 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and not game_state["winner_text"]:
                 paused = not paused
             if event.type == pygame.KEYDOWN and not game_state["winner_text"]:
-                if event.key == pygame.K_1:
+                if event.key in (pygame.K_1, pygame.K_KP1):
                     speed_multiplier = 1.0
-                elif event.key == pygame.K_2:
+                elif event.key in (pygame.K_2, pygame.K_KP2):
                     speed_multiplier = 2.0
-                elif event.key == pygame.K_3:
+                elif event.key in (pygame.K_3, pygame.K_4, pygame.K_KP3, pygame.K_KP4):
                     speed_multiplier = 4.0
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if result_summary_close_rect.collidepoint(event.pos) and game_state["winner_text"] and show_result_summary:
@@ -13171,10 +13615,8 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
                             break
 
         if not paused and not game_state["winner_text"]:
-            sim_dt = dt * speed_multiplier
-            steps = 1
-            if speed_multiplier >= 4.0:
-                steps = 2
+            steps = max(1, int(speed_multiplier))
+            sim_dt = dt * speed_multiplier / steps
             for _ in range(steps):
                 game_state["elapsed_time"] += sim_dt
                 update_weapon_orbs(game_state, sim_dt)
@@ -13315,6 +13757,16 @@ def main():
             if result is None:
                 break
             continue
+        if action == "ban":
+            result = ban_loop(screen, clock, title_font, subtitle_font, small_font, button_font)
+            if result is None:
+                break
+            continue
+        if action == "duel":
+            result = duel_loop(screen, clock, title_font, subtitle_font, small_font, button_font)
+            if result is None:
+                break
+            continue
         player_count = menu_result[1]
         timed_weapon_orb_drops_enabled = not menu_result[2] if len(menu_result) > 2 else True
         if GAME_SETTINGS.get("skip_entrance"):
@@ -13322,6 +13774,15 @@ def main():
         else:
             apply_skip_entrance = False
         screen = pygame.display.set_mode((BATTLE_WINDOW_WIDTH, BATTLE_WINDOW_HEIGHT), BATTLE_WINDOW_FLAGS)
+        prep_state = create_game_state(player_count, timed_weapon_orb_drops_enabled)
+        bet_job = bet_loop(screen, clock, title_font, small_font, button_font, prep_state)
+        if bet_job is None:
+            break
+        if bet_job == "cancel":
+            screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), menu_flags)
+            continue
+        if bet_job == "skip":
+            bet_job = None
         result = battle_loop(
             screen,
             clock,
@@ -13332,6 +13793,8 @@ def main():
             timed_weapon_orb_drops_enabled,
             skip_entrance=apply_skip_entrance,
             low_effects=GAME_SETTINGS.get("effects_quality") == "low",
+            game_state=prep_state,
+            bet_job=bet_job,
         )
         screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), menu_flags)
         if result is None:
