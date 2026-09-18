@@ -920,7 +920,7 @@ JOB_RESISTANCE_PROFILES = {
     "Berserker": {"physical_resistance": 0.84, "spell_resistance": 1.02},
     "Sniper": {"physical_resistance": 1.08, "spell_resistance": 1.05},
     "Necromancer": {"physical_resistance": 1.02, "spell_resistance": 0.88},
-    "Paladin": {"physical_resistance": 0.86, "spell_resistance": 0.88},
+    "Paladin": {"physical_resistance": 0.74, "spell_resistance": 0.76},
     "Ninja": {"physical_resistance": 0.96, "spell_resistance": 1.00},
     "Bomber": {"physical_resistance": 1.00, "spell_resistance": 0.96},
     "Vampire": {"physical_resistance": 0.97, "spell_resistance": 0.90},
@@ -2626,8 +2626,8 @@ JOB_DEFS[SEA_SAGE_JOB_NAME] = {
     "projectile_speed": 330.0,
     "move_speed": 95.0,
     "skill_id": "tide_flood",
-    "physical_resistance": 0.8,
-    "spell_resistance": 0.7,
+    "physical_resistance": 0.74,
+    "spell_resistance": 0.64,
     "use_design_attack_speed": True,
     "use_design_attack_damage": True,
     "basic_damage_kind": DAMAGE_KIND_SPELL,
@@ -2640,8 +2640,8 @@ CHARACTER_DATA[SEA_SAGE_JOB_NAME] = {
     "move_speed": 95.0,
     "attack_type": "ranged",
     "attack_range": 260.0,
-    "physical_resistance": 0.8,
-    "spell_resistance": 0.7,
+    "physical_resistance": 0.74,
+    "spell_resistance": 0.64,
     "mp_charge_style": "Gain 5% MP per attack and 3% per hit taken",
     "skill_name": "Oath of Tides / Tide Flood",
     "skill_description": "Basic attacks fire water bullets. Skill casts or every 80 damage taken spawn a Water Fish. Every 6 seconds, one Water Fish is consumed to heal 30 HP, grant a 15 HP shield for 3 seconds, and add a 5% damage-reduction stack for 8 seconds, up to 4 stacks. The active skill unleashes 3 rectangular tidal waves one after another; the last wave returns to the caster, heals 30 HP on contact, and consumes all Water Fish. Wave stun durations are reduced by 50%.",
@@ -6295,7 +6295,7 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
             attacker.design_phoenix_same_hits = 1
         else:
             attacker.design_phoenix_same_hits += 1
-        if attacker.design_phoenix_same_hits >= 7:
+        if attacker.design_phoenix_same_hits >= 12:
             attacker.design_phoenix_same_hits = 0
             target.apply_phoenix_fire(1, source=attacker, game_state=game_state)
     if role_num == 100:
@@ -10687,7 +10687,7 @@ class Character:
             self.paladin_tick_accumulator += dt
             while self.paladin_tick_accumulator >= PALADIN_HEAL_TICK:
                 self.paladin_tick_accumulator -= PALADIN_HEAL_TICK
-                self.heal(2)
+                self.heal(1)
 
         if self.vampire_channel_timer > 0:
             self.vampire_channel_timer = max(0.0, self.vampire_channel_timer - dt)
