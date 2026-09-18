@@ -145,7 +145,7 @@ ROLE_CONFIG_OVERRIDES = {
     57: {"skill_token": "dice_roll", "attack_random_values": [5, 20, 50, 100], "mp_mode": "attack_count", "mp_rate": 20.0},
     58: {"skill_token": "black_hole", "basic_damage_kind": "true", "mp_mode": "passive", "mp_rate": 12.0},
     59: {"skill_token": "arrow_rain", "mp_mode": "distance_scaled", "mp_rate": 0.75},
-    60: {"skill_token": "stone_skin", "attack_stun_duration": 0.12, "mp_mode": "damage_taken_scaled", "mp_rate": 1.0, "radius_scale": 1.24},
+    60: {"skill_token": "stone_skin", "attack_stun_duration": 0.35, "radius_scale": 1.24},
     61: {"skill_token": "swallow_return", "mp_mode": "attack_count", "mp_rate": 25.0},
     62: {"skill_token": "frost_burst", "basic_damage_kind": "spell", "attack_status": ("cold", 0.1), "mp_mode": "passive", "mp_rate": 8.0},
     63: {"skill_token": "guillotine", "mp_mode": "damage_dealt_scaled", "mp_rate": 1.5, "radius_scale": 1.1},

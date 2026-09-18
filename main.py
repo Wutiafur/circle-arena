@@ -7205,7 +7205,7 @@ def cast_design_skill(caster, game_state, token=None):
     elif token == "stone_skin":
         caster.clear_negative_states()
         caster.heal(80.0)
-        caster.control_immunity_timer = 5.0
+        caster.control_immunity_timer = 2.5
     elif token == "swallow_return":
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
         direction = direction.normalize()
@@ -8214,7 +8214,7 @@ class Character:
         if self.druid_form_timer > 0 and self.held_weapon is None:
             return DRUID_FORM_STUN
         if self.job_name == "DesignRole60_golem":
-            return 1.2
+            return 0.35
         return 0.0
 
     def is_twin_mirror(self):
