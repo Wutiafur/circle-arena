@@ -2516,8 +2516,8 @@ JOB_DEFS[SUNFIRE_JOB_NAME] = {
     "projectile_speed": 285.0,
     "move_speed": 110.0,
     "skill_id": "sunfire_kagura",
-    "physical_resistance": 0.8,
-    "spell_resistance": 0.7,
+    "physical_resistance": 0.74,
+    "spell_resistance": 0.65,
     "use_design_attack_speed": True,
     "use_design_attack_damage": True,
 }
@@ -2529,8 +2529,8 @@ CHARACTER_DATA[SUNFIRE_JOB_NAME] = {
     "move_speed": 110.0,
     "attack_type": "melee",
     "attack_range": 58.0,
-    "physical_resistance": 0.8,
-    "spell_resistance": 0.7,
+    "physical_resistance": 0.74,
+    "spell_resistance": 0.65,
     "mp_charge_style": "Gain 10% MP per attack and 5% per hit taken",
     "skill_name": "Water-Form Flow / Sunfire Kagura",
     "skill_description": "Five-step water combo with 4% damage reduction per hit, up to 40%. The active skill clears control effects and enters Fire Form for 8 seconds, keeping the combo flow while adding true damage and +30% move speed.",
@@ -2555,8 +2555,8 @@ DESIGN_ROLE_METADATA[SUNFIRE_JOB_NAME] = {
     "skill_token": "sunfire_kagura",
 }
 JOB_RESISTANCE_PROFILES[SUNFIRE_JOB_NAME] = {
-    "physical_resistance": 0.8,
-    "spell_resistance": 0.7,
+    "physical_resistance": 0.74,
+    "spell_resistance": 0.65,
 }
 
 JOB_DEFS[WINDSTORM_FOX_JOB_NAME] = {
@@ -6550,9 +6550,9 @@ def fire_design_basic_attack(attacker, target, game_state):
                             )
                         else:
                             victim.take_damage(bonus_damage, source=attacker, damage_type="true_sunfire_5", game_state=game_state)
-                attacker.heal(100.0)
+                attacker.heal(60.0)
             else:
-                attacker.heal(50.0)
+                attacker.heal(30.0)
             primary_target = select_nearest_enemy(attacker, game_state["characters"])
             if fire_form and primary_target is not None:
                 knockback_dir = primary_target.pos - attacker.pos
@@ -6699,6 +6699,18 @@ def fire_design_basic_attack(attacker, target, game_state):
                 explosion_damage=damage,
                 explosion_damage_type="design_physical_mortar_blast",
                 explosion_mp_per_hit=2.0,
+            )
+        elif role_num == 78:  # 炼狱使者：远程法术火弹
+            spawn_design_projectile(
+                attacker,
+                game_state,
+                direction,
+                damage,
+                "design_spell_hellfire_orb",
+                color=(232, 74, 58),
+                speed=max(attacker.config.get("projectile_speed", 310.0), 360.0),
+                max_range=attacker.get_current_attack_range(),
+                on_hit=lambda proj, tgt, dealt, hgs: apply_design_hit_effects(attacker, tgt, hgs, False),
             )
         else:
             total_shots = repeats + (2 if role_num == 79 and random.random() < 0.2 else 0)

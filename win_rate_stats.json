@@ -17,11 +17,11 @@
       "wins": 0
     },
     "Sniper": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "Necromancer": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "Paladin": {
@@ -49,7 +49,7 @@
       "wins": 2
     },
     "Toxicologist": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "Frost Mage": {
@@ -85,7 +85,7 @@
       "wins": 0
     },
     "Smasher": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "Succubus": {
@@ -149,7 +149,7 @@
       "wins": 0
     },
     "Dark Knight": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Psionic": {
@@ -189,7 +189,7 @@
       "wins": 0
     },
     "DesignRole49_cultist": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole50_elementalist": {
@@ -201,7 +201,7 @@
       "wins": 0
     },
     "DesignRole52_gravekeeper": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole53_sentinel": {
@@ -229,7 +229,7 @@
       "wins": 0
     },
     "DesignRole59_ranger": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole60_golem": {
@@ -257,15 +257,15 @@
       "wins": 0
     },
     "DesignRole66_blood_mage": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole67_martial_artist": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole68_arachnid": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole69_ironclad": {
@@ -305,7 +305,7 @@
       "wins": 0
     },
     "DesignRole78_hellbringer": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole79_outlaw": {
@@ -317,7 +317,7 @@
       "wins": 0
     },
     "DesignRole81_architect": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole82_bloodhunter": {
@@ -329,11 +329,11 @@
       "wins": 0
     },
     "DesignRole84_hive_mind": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole85_sword_spirit": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole86_soulbinder": {
@@ -345,7 +345,7 @@
       "wins": 0
     },
     "DesignRole88_powder_keg": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole89_acoustician": {
@@ -373,11 +373,11 @@
       "wins": 0
     },
     "DesignRole94_sunfire_blademaster": {
-      "matches": 1,
-      "wins": 1
+      "matches": 2,
+      "wins": 2
     },
     "DesignRole95_windstorm_fox": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole96_sea_sage": {
