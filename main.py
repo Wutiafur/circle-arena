@@ -727,6 +727,8 @@ SOUL_NINE_SLASH_DELAY = 0.12
 SOUL_SLASH_COLOR = (240, 242, 248)
 SOUL_SLASH_CRIT_COLOR = (255, 208, 54)
 SOUL_BLADE_COLOR = (116, 176, 232)
+SOUL_BLADE_PHYSICAL_REDUCTION = 0.50
+SOUL_BLADE_TRUE_DAMAGE_INCREASE = 1.00
 RANGER_MARK_MAX = 3
 RANGER_MARK_DAMAGE_BONUS = 0.08
 RANGER_DASH_SPEED_DURATION = 0.5
@@ -5916,8 +5918,14 @@ class DesignSummon:
         if not self.alive or amount <= 0:
             return 0.0
         if self.summon_type == "soul_blade":
-            absorbed = amount * 0.9
-            transferred = amount * SOUL_BLADE_TRANSFER_RATIO
+            blade_amount = amount
+            damage_kind = get_damage_kind(damage_type, source if isinstance(source, Character) else None)
+            if damage_kind is None:
+                blade_amount *= 1.0 + SOUL_BLADE_TRUE_DAMAGE_INCREASE
+            elif damage_kind == DAMAGE_KIND_PHYSICAL:
+                blade_amount *= 1.0 - SOUL_BLADE_PHYSICAL_REDUCTION
+            absorbed = blade_amount * 0.9
+            transferred = blade_amount * SOUL_BLADE_TRANSFER_RATIO
             if transferred > 0 and self.owner is not None and getattr(self.owner, "alive", False):
                 self.owner.take_damage(transferred, source=source, damage_type="true_soul_blade_link", game_state=game_state)
             pre_damage_hp = self.hp
