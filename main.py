@@ -474,7 +474,7 @@ SUNFIRE_DAMAGE_REDUCTION_STACKS = 10
 SUNFIRE_DAMAGE_REDUCTION_PER_STACK = 0.04
 WINDSTORM_FOX_JOB_NAME = "DesignRole95_windstorm_fox"
 WINDSTORM_FOX_FAN_COLOR = (170, 174, 180)
-WINDSTORM_FOX_BLADE_COLOR = (248, 248, 255)
+WINDSTORM_FOX_BLADE_COLOR = (255, 255, 255)
 WINDSTORM_FOX_AURA_COLOR = (46, 82, 56)
 WINDSTORM_FOX_QI_MAX = 5
 WINDSTORM_FOX_MOVE_BONUS_PER_QI = 0.03
@@ -2595,7 +2595,7 @@ POKEDEX_LOCALIZATION[WINDSTORM_FOX_JOB_NAME] = {
     "name": "狂风灵狐",
     "mp_charge_style": "每次普攻充能20%",
     "skill_name": "风气聚灵 / 狂风刃卷",
-    "skill_description": "每次普攻或技能命中敌人都会获得1层风气，最高5层。每层提供3%移速与6%攻速。满层后普攻变为两发风刃，每发造成60%普攻伤害，并有20%概率向后快速位移。若5秒未普攻，则每3秒失去1层风气。主动技能会随机向敌人发射风刃：R级50%发射6道并追加1道全场风刃；SR级35%发射10道并使目标物理抗性+0.5持续3秒；SSR级15%发射18道，附带30%物理吸血并有40%概率弹射最近敌人。",
+    "skill_description": "每次普攻或技能命中敌人都会获得1层风气，最高5层。每层提供3%移速与6%攻速。满层后普攻变为两发风刃，每发造成60%普攻伤害，并有20%概率向后快速位移。若5秒未普攻，则每3秒失去1层风气。主动技能甩出白色弧刃，0.1秒/发逐发连射：R级50%逐发甩出8道并追加1道全场风刃；SR级35%逐发甩出12道并使目标物理抗性+0.5持续3秒；SSR级15%逐发甩出20道，附带30%物理吸血并有40%概率弹射最近敌人；另有30%概率追加一轮。",
 }
 DESIGN_ROLE_METADATA[WINDSTORM_FOX_JOB_NAME] = {
     "role_num": 95,
@@ -2606,7 +2606,7 @@ DESIGN_ROLE_METADATA[WINDSTORM_FOX_JOB_NAME] = {
     "attack_text": "风刃，远程物理，基础伤害 10",
     "mp_text": "每次普攻充能20%",
     "skill_name": "风气聚灵 / 狂风刃卷",
-    "skill_description": "每次普攻或技能命中敌人，获得1层风气，最高5层。每层提供3%移速和6%攻速。满5层后普攻变为双风刃，每发60%伤害，并有20%概率向后快速移动。5秒未普攻后，每3秒失去1层风气。主动技能按R/SR/SSR概率释放随机风刃，分别附带全场追击、物抗提升、吸血和弹射效果。",
+    "skill_description": "每次普攻或技能命中敌人，获得1层风气，最高5层。每层提供3%移速和6%攻速。满5层后普攻变为双风刃，每发60%伤害，并有20%概率向后快速移动。5秒未普攻后，每3秒失去1层风气。主动技能甩出白色弧刃，0.1秒/发逐发连射，按R/SR/SSR概率分别甩出8/12/20道，附带全场追击、物抗提升、吸血和弹射效果，30%概率追加一轮。",
     "basic_damage_kind": "physical",
     "skill_token": "windstorm_blade_roll",
 }
@@ -5097,6 +5097,21 @@ class DesignEffect:
                     damage_type=self.data.get("damage_type", "design_spell_meteor"),
                 )
                 self.alive = False
+        elif self.effect_type == "windstorm_blades":
+            interval = float(self.data.get("interval", 0.10))
+            total = int(self.data.get("total", 8))
+            fired = int(self.data.get("fired", 0))
+            while fired < total and self.timer >= (fired + 1) * interval:
+                fired += 1
+                self.fire_windstorm_blade(game_state, fired)
+            self.data["fired"] = fired
+            if fired >= total:
+                global_damage = float(self.data.get("global_damage", 0.0))
+                if global_damage > 0:
+                    for target in get_targetables(game_state):
+                        if target.alive and target.owner_id != self.owner_id:
+                            target.take_damage(global_damage, source=self.owner, damage_type="design_physical_windstorm_global", game_state=game_state)
+                self.alive = False
         elif self.effect_type == "soul_chain":
             target_id = self.data.get("target_id")
             target = next((candidate for candidate in get_targetables(game_state) if id(candidate) == target_id), None)
@@ -5576,6 +5591,31 @@ class DesignEffect:
         target.pos += direction * min(strength * dt, offset.length())
         if hasattr(target, "update_rect"):
             target.update_rect()
+
+    def fire_windstorm_blade(self, game_state, shot_index):
+        living = [t for t in get_targetables(game_state) if t.alive and t.owner_id != self.owner_id]
+        if living:
+            chosen = random.choice(living)
+            direction = chosen.pos - self.owner.pos
+            if direction.length_squared() == 0:
+                direction = random_unit_vector()
+            direction = direction.normalize()
+        else:
+            direction = random_unit_vector()
+        sway = float(self.data.get("sway_angle", 8.0))
+        direction = direction.rotate((shot_index % 3 - 1) * sway)
+        spawn_windstorm_blade_projectile(
+            self.owner,
+            game_state,
+            direction,
+            float(self.data.get("damage", WINDSTORM_FOX_SKILL_BLADE_DAMAGE)),
+            self.data.get("damage_type", "design_physical_windstorm_blade"),
+            speed=float(self.data.get("speed", 720.0)),
+            max_range=float(self.data.get("max_range", 920.0)),
+            apply_resist=bool(self.data.get("apply_resist", False)),
+            lifesteal_ratio=float(self.data.get("lifesteal_ratio", 0.0)),
+            ricochet=bool(self.data.get("ricochet", False)),
+        )
 
     def collapse_gravity(self, game_state):
         for target in get_targetables(game_state):
@@ -6769,56 +6809,36 @@ def cast_design_skill(caster, game_state, token=None):
         )
         caster.add_true_shield(60.0)
     elif role_num == 95 or token == "windstorm_blade_roll":
-        def windstorm_blade_roll_once():
+        def add_windstorm_volley():
             living_enemies = [enemy for enemy in enemies if enemy.alive]
             if not living_enemies:
                 return False
             roll = random.random()
             if roll < 0.50:
-                for _ in range(8):
-                    chosen = random.choice(living_enemies)
-                    spawn_windstorm_blade_projectile(
-                        caster,
-                        game_state,
-                        chosen.pos - caster.pos,
-                        WINDSTORM_FOX_SKILL_BLADE_DAMAGE,
-                        "design_physical_windstorm_blade",
-                        speed=700.0,
-                        max_range=900.0,
-                    )
-                for enemy in living_enemies:
-                    enemy.take_damage(WINDSTORM_FOX_GLOBAL_BLADE_DAMAGE, source=caster, damage_type="design_physical_windstorm_global", game_state=game_state)
+                tier = dict(total=8, speed=700.0, max_range=900.0, apply_resist=False, lifesteal_ratio=0.0, ricochet=False, global_damage=WINDSTORM_FOX_GLOBAL_BLADE_DAMAGE)
             elif roll < 0.85:
-                for _ in range(12):
-                    chosen = random.choice(living_enemies)
-                    spawn_windstorm_blade_projectile(
-                        caster,
-                        game_state,
-                        chosen.pos - caster.pos,
-                        WINDSTORM_FOX_SKILL_BLADE_DAMAGE,
-                        "design_physical_windstorm_blade",
-                        speed=730.0,
-                        max_range=920.0,
-                        apply_resist=True,
-                    )
+                tier = dict(total=12, speed=730.0, max_range=920.0, apply_resist=True, lifesteal_ratio=0.0, ricochet=False, global_damage=0.0)
             else:
-                for _ in range(20):
-                    chosen = random.choice(living_enemies)
-                    spawn_windstorm_blade_projectile(
-                        caster,
-                        game_state,
-                        chosen.pos - caster.pos,
-                        WINDSTORM_FOX_SKILL_BLADE_DAMAGE,
-                        "design_physical_windstorm_blade",
-                        speed=760.0,
-                        max_range=940.0,
-                        ricochet=True,
-                        lifesteal_ratio=WINDSTORM_FOX_LIFESTEAL_RATIO,
-                    )
+                tier = dict(total=20, speed=760.0, max_range=940.0, apply_resist=False, lifesteal_ratio=WINDSTORM_FOX_LIFESTEAL_RATIO, ricochet=True, global_damage=0.0)
+            add_design_effect(
+                game_state,
+                DesignEffect(
+                    "windstorm_blades",
+                    caster,
+                    pygame.Vector2(caster.pos),
+                    lifetime=tier["total"] * 0.10 + 1.0,
+                    interval=0.10,
+                    damage=WINDSTORM_FOX_SKILL_BLADE_DAMAGE,
+                    damage_type="design_physical_windstorm_blade",
+                    **tier,
+                ),
+            )
             return True
 
-        if windstorm_blade_roll_once() and random.random() < 0.30:
-            windstorm_blade_roll_once()
+        if not add_windstorm_volley():
+            return False  # 无活敌：不消耗
+        if random.random() < 0.30:
+            add_windstorm_volley()
     elif role_num == 93 or token == "twin_mirror_pulse":
         current_form = getattr(caster, "twin_mirror_form", "white")
         if current_form == "white":
