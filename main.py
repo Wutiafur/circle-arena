@@ -4082,9 +4082,16 @@ def spawn_damage_text(game_state, target, amount, damage_kind=None, is_true_dama
     if game_state is None or target is None:
         return
     offset = pygame.Vector2(0, -getattr(target, "radius", CHARACTER_RADIUS) - 10)
+    new_pos = target.pos + offset
+    merge_window = 0.15
+    for existing in reversed(game_state["damage_texts"][-6:]):
+        if existing.alive and (DAMAGE_TEXT_DURATION - existing.lifetime) < merge_window:
+            if (existing.pos - new_pos).length() < 16.0:
+                existing.add_amount(amount, text=text)
+                return
     game_state["damage_texts"].append(
         DamageText(
-            target.pos + offset,
+            new_pos,
             amount,
             damage_kind=damage_kind,
             is_true_damage=is_true_damage,
@@ -4158,6 +4165,11 @@ class DamageText:
         self.color = color if color is not None else get_damage_text_color(damage_kind, is_true_damage)
         self.lifetime = DAMAGE_TEXT_DURATION
         self.alive = True
+
+    def add_amount(self, amount, text=None):
+        self.amount += max(1, int(round(amount)))
+        self.text = text if text is not None else f"-{self.amount}"
+        self.lifetime = DAMAGE_TEXT_DURATION
 
     def update(self, dt):
         self.pos.y -= 32 * dt
@@ -11660,27 +11672,13 @@ def draw_ui(surface, title_font, small_font, game_state):
     header_rect = pygame.Rect(ARENA_RECT.left, 10, ARENA_RECT.width, 46)
     draw_panel(surface, header_rect, (16, 22, 30), accent_color=MENU_ACCENT, radius=12, shadow_offset=(2, 3))
 
-    title = title_font.render("Auto Battler Arena", True, TEXT_COLOR)
-    surface.blit(title, (header_rect.left + 14, header_rect.top + 6))
-
+    title = title_font.render("圆环斗场 · 自动对战", True, TEXT_COLOR)
+    surface.blit(title, (header_rect.left + 14, header_rect.top + 8))
     alive_characters = get_living_main_characters(game_state)
-    chips = [
-        ("Alive", str(len(alive_characters)), (110, 190, 140)),
-        ("Orbs", str(len(game_state["weapon_orbs"])), (110, 170, 255)),
-    ]
-    chip_width = 88
-    chip_height = 24
-    chip_gap = 8
-    chips_total_width = len(chips) * chip_width + max(0, len(chips) - 1) * chip_gap
-    chip_x = header_rect.right - chips_total_width - 14
-    chip_y = header_rect.top + 11
-    for index, (label, value, accent_color) in enumerate(chips):
-        chip_rect = pygame.Rect(chip_x + index * (chip_width + chip_gap), chip_y, chip_width, chip_height)
-        draw_panel(surface, chip_rect, (24, 30, 40), border_color=(78, 88, 102), accent_color=accent_color, radius=10, shadow_offset=(1, 2))
-        label_surface = small_font.render(label, True, (174, 186, 200))
-        value_surface = small_font.render(value, True, TEXT_COLOR)
-        surface.blit(label_surface, (chip_rect.left + 10, chip_rect.top + 4))
-        surface.blit(value_surface, (chip_rect.right - value_surface.get_width() - 10, chip_rect.top + 4))
+    elapsed = small_font.render(f"时间 {int(game_state.get('elapsed_time', 0.0)) // 60:02d}:{int(game_state.get('elapsed_time', 0.0)) % 60:02d}", True, (150, 164, 180))
+    surface.blit(elapsed, (header_rect.left + 320, header_rect.top + 13))
+    alive_label = small_font.render(f"存活 {len(alive_characters)}/{len(game_state.get('battle_participants', []))}", True, (110, 190, 140))
+    surface.blit(alive_label, alive_label.get_rect(topright=(header_rect.right - 16, header_rect.top + 13)))
 
     if game_state["winner_text"]:
         banner = title_font.render(game_state["winner_text"], True, BORDER_COLOR)
@@ -11864,8 +11862,9 @@ def draw_world(surface, game_state, label_font):
         character.draw(surface, label_font)
     for particle in game_state["death_particles"]:
         particle.draw(surface)
-    for damage_text in game_state["damage_texts"]:
-        damage_text.draw(surface, label_font)
+    if GAME_SETTINGS.get("show_damage_numbers", True):
+        for damage_text in game_state["damage_texts"]:
+            damage_text.draw(surface, label_font)
     for banner in game_state.get("kill_banners", []):
         banner.draw(surface, label_font)
 
@@ -12603,7 +12602,37 @@ def describe_design_state(character):
     return " ".join(parts)
 
 
-def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_state, active_tab, hover_tab, follow_character_id=None):
+SIDEBAR_VISIBLE_ROWS = max(1, (BATTLE_WINDOW_HEIGHT - 16 - 8 - 102) // 58)
+
+
+def draw_follow_panel(surface, title_font, body_font, character):
+    panel = pygame.Rect(SCREEN_WIDTH - 288, 64, 274, 144)
+    draw_panel(surface, panel, (20, 26, 36), accent_color=(150, 214, 170), radius=12, shadow_offset=(2, 2))
+    name = title_font.render(f"跟随 · {get_character_display_name(character)}", True, (150, 214, 170))
+    surface.blit(name, (panel.left + 12, panel.top + 8))
+    hp_ratio = clamp(character.hp / max(1.0, character.max_hp), 0.0, 1.0)
+    bar = pygame.Rect(panel.left + 12, panel.top + 34, panel.width - 24, 10)
+    pygame.draw.rect(surface, (34, 40, 52), bar, border_radius=5)
+    pygame.draw.rect(surface, (110, 190, 140), pygame.Rect(bar.left + 1, bar.top + 1, max(1, int((bar.width - 2) * hp_ratio)), bar.height - 2), border_radius=4)
+    hp_text = body_font.render(f"{int(character.hp)}/{int(character.max_hp)}", True, (196, 208, 224))
+    surface.blit(hp_text, (panel.right - hp_text.get_width() - 14, panel.top + 28))
+    y = panel.top + 52
+    lines = [
+        f"伤害 {int(character.damageDealt)} · 承伤 {int(character.damageTaken)}",
+        f"击杀 {int(getattr(character, 'kill_count', 0))} · 连杀 {getattr(character, 'kill_streak', 0)}",
+    ]
+    if getattr(character, "killstreak_buff_level", 0) > 0:
+        lines.append(f"连杀增益 Lv.{character.killstreak_buff_level} ({character.killstreak_buff_timer:.1f}s)")
+    state = describe_design_state(character)
+    if state:
+        lines.append(state)
+    for line in lines:
+        line_surface = body_font.render(truncate_text(line, body_font, panel.width - 24), True, (196, 208, 224))
+        surface.blit(line_surface, (panel.left + 12, y))
+        y += 20
+
+
+def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_state, active_tab, hover_tab, follow_character_id=None, scroll_offset=0, speed_text=""):
     sidebar_rect = pygame.Rect(0, 0, BATTLE_SIDEBAR_WIDTH, BATTLE_WINDOW_HEIGHT)
     panel_rect = sidebar_rect.inflate(-16, -16)
     surface.fill((10, 14, 20), sidebar_rect)
@@ -12611,16 +12640,25 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
     pygame.draw.line(surface, BORDER_COLOR, (sidebar_rect.left, 0), (sidebar_rect.left, BATTLE_WINDOW_HEIGHT), 2)
 
     header = title_font.render("本局数据", True, TEXT_COLOR)
-    surface.blit(header, header.get_rect(center=(sidebar_rect.width // 2, 28)))
+    surface.blit(header, header.get_rect(center=(sidebar_rect.width // 2, 20)))
 
-    tab_y = 54
-    tab_w = 128
-    tab_h = 32
-    tab_gap = 8
-    output_rect = pygame.Rect(panel_rect.left + 6, tab_y, tab_w, tab_h)
-    taken_rect = pygame.Rect(output_rect.right + tab_gap, tab_y, tab_w, tab_h)
-    tab_rects = {"output": output_rect, "taken": taken_rect}
-    tab_labels = {"output": "输出排行", "taken": "承伤排行"}
+    # 顶部信息条：存活 / 武器球 / 倍速（C1+C2 统一收纳）
+    alive = len(get_living_main_characters(game_state))
+    total = len(game_state.get("battle_participants", []))
+    orbs = len(game_state["weapon_orbs"])
+    speed_part = f" · 速度 x{speed_text}" if speed_text else ""
+    info_line = f"存活 {alive}/{total} · 球 {orbs}{speed_part}"
+    info_surface = subtitle_font.render(info_line, True, (150, 214, 170))
+    surface.blit(info_surface, info_surface.get_rect(center=(sidebar_rect.width // 2, 46)))
+
+    tab_y = 62
+    tab_w = 84
+    tab_h = 30
+    tab_gap = 6
+    tab_rects = {}
+    tab_labels = {"output": "输出", "taken": "承伤", "kills": "击杀"}
+    for index, key in enumerate(tab_labels):
+        tab_rects[key] = pygame.Rect(panel_rect.left + 6 + index * (tab_w + tab_gap), tab_y, tab_w, tab_h)
     for key, rect in tab_rects.items():
         is_active = active_tab == key
         is_hover = hover_tab == key
@@ -12630,58 +12668,66 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
         surface.blit(label, label.get_rect(center=rect.center))
 
     participants = list(game_state.get("battle_participants", game_state.get("characters", [])))
-    metric = "damageDealt" if active_tab == "output" else "damageTaken"
-    accent = (220, 72, 72) if active_tab == "output" else (84, 150, 255)
+    metric = {"output": "damageDealt", "taken": "damageTaken", "kills": "kill_count"}[active_tab]
+    accent = {"output": (220, 72, 72), "taken": (84, 150, 255), "kills": (255, 214, 120)}[active_tab]
     bar_bg = (34, 40, 52)
     bar_inner = (72, 78, 92)
-    rows = sorted(participants, key=lambda character: (-getattr(character, metric, 0.0), character.id))
-    max_value = max((getattr(character, metric, 0.0) for character in rows), default=0.0)
+    rows = sorted(participants, key=lambda character: (-float(getattr(character, metric, 0.0) or 0.0), character.id))
+    max_value = max((float(getattr(character, metric, 0.0) or 0.0) for character in rows), default=0.0)
 
-    row_top = 100
-    row_height = 50
-    bar_width = 118
-    name_width = 90
+    row_top = 102
+    row_height = 58
+    bar_width = 150
+    visible_rows = max(1, (panel_rect.bottom - 8 - row_top) // row_height)
+    visible = rows[scroll_offset : scroll_offset + visible_rows]
     clickable_rows = []
-    for index, character in enumerate(rows):
+    for index, character in enumerate(visible):
         row_y = row_top + index * row_height
-        row_rect = pygame.Rect(panel_rect.left + 6, row_y, panel_rect.width - 12, row_height - 8)
-        if row_rect.bottom > panel_rect.bottom - 8:
-            break
+        row_rect = pygame.Rect(panel_rect.left + 6, row_y, panel_rect.width - 12, row_height - 10)
         clickable_rows.append({"character": character, "rect": row_rect})
         row_bg = (26, 30, 38) if character.alive else (22, 24, 30)
-        if follow_character_id is not None and character.id == follow_character_id:
+        is_follow = follow_character_id is not None and character.id == follow_character_id
+        if is_follow:
             row_bg = (42, 52, 66)
         pygame.draw.rect(surface, row_bg, row_rect, border_radius=10)
         pygame.draw.rect(surface, (46, 52, 64), row_rect, 1, border_radius=10)
 
         icon_color = character.color if character.alive else tuple(max(0, int(channel * 0.55)) for channel in character.color)
-        draw_shape_icon(surface, character.shape, icon_color, (row_rect.left + 16, row_rect.centery - 4), 10)
+        draw_shape_icon(surface, character.shape, icon_color, (row_rect.left + 16, row_rect.top + 16), 9)
 
-        name = truncate_text(get_character_display_name(character), body_font, name_width)
         name_color = TEXT_COLOR if character.alive else (160, 168, 176)
-        if follow_character_id is not None and character.id == follow_character_id:
+        if is_follow:
             name_color = (150, 214, 170)
+        name = truncate_text(get_character_display_name(character), body_font, 100)
         name_surface = body_font.render(name, True, name_color)
-        surface.blit(name_surface, (row_rect.left + 32, row_rect.top + 4))
+        surface.blit(name_surface, (row_rect.left + 34, row_rect.top + 5))
+        kills = int(getattr(character, "kill_count", 0))
+        kill_surface = subtitle_font.render(f"×{kills}", True, (255, 214, 120))
+        surface.blit(kill_surface, (row_rect.left + 34 + name_surface.get_width() + 4, row_rect.top + 7))
 
-        value = float(getattr(character, metric, 0.0))
+        value = float(getattr(character, metric, 0.0) or 0.0)
         value_surface = subtitle_font.render(str(int(round(value))), True, accent)
-        surface.blit(value_surface, (row_rect.right - value_surface.get_width() - 10, row_rect.top + 4))
-
-        kill_surface = subtitle_font.render(f"击杀 {getattr(character, 'kill_count', 0)}", True, (255, 214, 120))
-        surface.blit(kill_surface, (row_rect.left + 110, row_rect.top + 4))
+        surface.blit(value_surface, (row_rect.right - value_surface.get_width() - 8, row_rect.top + 5))
 
         state_text = describe_design_state(character)
         if state_text and character.alive:
-            state_surface = body_font.render(truncate_text(state_text, body_font, 150), True, (150, 180, 205))
-            surface.blit(state_surface, (row_rect.left + 32, row_rect.top + 21))
+            if is_follow:
+                state_surface = body_font.render(truncate_text(state_text, body_font, 220), True, (150, 180, 205))
+                surface.blit(state_surface, (row_rect.left + 34, row_rect.top + 26))
+            else:
+                state_surface = subtitle_font.render(truncate_text(state_text, subtitle_font, 200), True, (150, 180, 205))
+                surface.blit(state_surface, (row_rect.left + 34, row_rect.top + 27))
 
         fill_width = int(bar_width * (value / max_value)) if max_value > 0 else 0
-        bar_rect = pygame.Rect(row_rect.left + 32, row_rect.bottom - 12, bar_width, 8)
+        bar_rect = pygame.Rect(row_rect.left + 34, row_rect.bottom - 14, bar_width, 8)
         pygame.draw.rect(surface, bar_bg, bar_rect, border_radius=4)
         if fill_width > 0:
             pygame.draw.rect(surface, bar_inner, bar_rect.inflate(-2, -2), border_radius=4)
             pygame.draw.rect(surface, accent, pygame.Rect(bar_rect.left + 1, bar_rect.top + 1, max(1, fill_width - 2), bar_rect.height - 2), border_radius=4)
+
+    if scroll_offset > 0 or scroll_offset + visible_rows < len(rows):
+        scroll_hint = subtitle_font.render(f"滚轮滚动 {scroll_offset + 1}-{min(len(rows), scroll_offset + visible_rows)}/{len(rows)}", True, (120, 140, 160))
+        surface.blit(scroll_hint, scroll_hint.get_rect(center=(sidebar_rect.width // 2, BATTLE_WINDOW_HEIGHT - 18)))
     return clickable_rows
 
 
@@ -13405,7 +13451,8 @@ def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
     quality_low_rect = pygame.Rect(420, 330, 110, 40)
     entrance_rect = pygame.Rect(244, 400, 312, 40)
     fullscreen_rect = pygame.Rect(244, 460, 312, 40)
-    return_rect = pygame.Rect(300, 560, 200, 44)
+    damage_rect = pygame.Rect(244, 520, 312, 40)
+    return_rect = pygame.Rect(300, 576, 200, 44)
 
     dragging_volume = False
 
@@ -13438,6 +13485,8 @@ def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
                     flags = pygame.FULLSCREEN if settings["fullscreen"] else pygame.DOUBLEBUF
                     screen = pygame.display.set_mode((WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT), flags | pygame.DOUBLEBUF)
                     canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                elif damage_rect.collidepoint(mapped_pos):
+                    settings["show_damage_numbers"] = not settings.get("show_damage_numbers", True)
                 elif volume_slider.collidepoint(mapped_pos):
                     dragged_x = clamp(mapped_pos.x - volume_slider.left, 0, volume_slider.width)
                     settings["volume"] = int(round(dragged_x / volume_slider.width * 100))
@@ -13463,6 +13512,7 @@ def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
                 ("quality_low", quality_low_rect),
                 ("entrance", entrance_rect),
                 ("fullscreen", fullscreen_rect),
+                ("damage", damage_rect),
             ):
                 if rect.collidepoint(mouse_pos):
                     hover_name = name
@@ -13513,6 +13563,14 @@ def settings_loop(screen, clock, title_font, subtitle_font, body_font, button_fo
         if settings.get("fullscreen", False):
             pygame.draw.circle(canvas_surface, (142, 226, 188), (fullscreen_rect.left + 22, fullscreen_rect.centery), 8)
 
+        # 伤害数字显示
+        damage_color = MENU_BUTTON_HOVER if hover_name == "damage" else MENU_BUTTON
+        draw_panel(canvas_surface, damage_rect, damage_color, border_color=(74, 82, 92), radius=10, shadow_offset=(1, 1))
+        damage_text = body_font.render("显示伤害数字（关闭更清爽）", True, TEXT_COLOR)
+        canvas_surface.blit(damage_text, damage_text.get_rect(center=(damage_rect.centerx + 20, damage_rect.centery)))
+        if settings.get("show_damage_numbers", True):
+            pygame.draw.circle(canvas_surface, (142, 226, 188), (damage_rect.left + 22, damage_rect.centery), 8)
+
         return_color = MENU_BUTTON_HOVER if hover_name == "return" else MENU_BUTTON
         draw_panel(canvas_surface, return_rect, return_color, radius=12, shadow_offset=(2, 2))
         return_text = button_font.render("返回", True, TEXT_COLOR)
@@ -13537,6 +13595,7 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
     follow_character_id = None
     follow_timer = 0.0
     sidebar_rows = []
+    sidebar_scroll = 0
     show_result_summary = False
 
     if skip_entrance:
@@ -13573,8 +13632,11 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             "resume": pygame.Rect(250, 320, 300, 68),
             "menu": pygame.Rect(250, 404, 300, 68),
         }
-        output_tab_rect = pygame.Rect(SCREEN_WIDTH + 16, 54, 128, 32)
-        taken_tab_rect = pygame.Rect(SCREEN_WIDTH + 152, 54, 128, 32)
+        sidebar_tab_rects = {
+            "output": pygame.Rect(SCREEN_WIDTH + 22, 62, 84, 30),
+            "taken": pygame.Rect(SCREEN_WIDTH + 112, 62, 84, 30),
+            "kills": pygame.Rect(SCREEN_WIDTH + 202, 62, 84, 30),
+        }
 
         result_summary_rect = pygame.Rect(120, 300, 560, 420)
         result_summary_close_rect = pygame.Rect(310, 664, 180, 40)
@@ -13592,15 +13654,23 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
                     speed_multiplier = 2.0
                 elif event.key in (pygame.K_3, pygame.K_4, pygame.K_KP3, pygame.K_KP4):
                     speed_multiplier = 4.0
+            if event.type == pygame.MOUSEWHEEL and not game_state["winner_text"]:
+                wheel_mouse_x, wheel_mouse_y = pygame.mouse.get_pos()
+                if wheel_mouse_x >= SCREEN_WIDTH:
+                    participant_count = len(game_state.get("battle_participants", []))
+                    max_scroll = max(0, participant_count - SIDEBAR_VISIBLE_ROWS)
+                    sidebar_scroll = int(clamp(sidebar_scroll - event.y, 0, max_scroll))
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if result_summary_close_rect.collidepoint(event.pos) and game_state["winner_text"] and show_result_summary:
                     show_result_summary = False
                 elif result_summary_toggle_rect.collidepoint(event.pos) and game_state["winner_text"]:
                     show_result_summary = not show_result_summary
-                elif output_tab_rect.collidepoint(event.pos):
+                elif sidebar_tab_rects["output"].collidepoint(event.pos):
                     active_tab = "output"
-                elif taken_tab_rect.collidepoint(event.pos):
+                elif sidebar_tab_rects["taken"].collidepoint(event.pos):
                     active_tab = "taken"
+                elif sidebar_tab_rects["kills"].collidepoint(event.pos):
+                    active_tab = "kills"
                 elif game_state["winner_text"] and end_button_rect.collidepoint(event.pos):
                     return "menu"
                 elif paused and pause_button_rects["resume"].collidepoint(event.pos):
@@ -13700,10 +13770,10 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             pause_hover = next((name for name, rect in pause_button_rects.items() if rect.collidepoint(mouse_pos)), None)
             draw_pause_menu(frame_surface, title_font, small_font, button_font, pause_hover)
 
-        speed_badge = battle_font.render(f"速度 x{speed_multiplier:g}", True, (150, 214, 170))
-        badge_rect = speed_badge.get_rect(topright=(SCREEN_WIDTH - 14, 12))
-        draw_panel(frame_surface, badge_rect.inflate(14, 8), (22, 34, 30), border_color=(60, 90, 74), radius=8, shadow_offset=(1, 1))
-        frame_surface.blit(speed_badge, badge_rect)
+        if follow_character_id is not None and follow_timer > 0 and not game_state["winner_text"]:
+            follow_target = next((c for c in game_state["characters"] if c.id == follow_character_id and c.alive), None)
+            if follow_target is not None:
+                draw_follow_panel(frame_surface, battle_font, small_font, follow_target)
 
         sidebar_surface.fill((10, 14, 20))
         sidebar_rows = draw_battle_sidebar(
@@ -13713,8 +13783,10 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             small_font,
             game_state,
             active_tab,
-            "output" if output_tab_rect.collidepoint(mouse_pos) else "taken" if taken_tab_rect.collidepoint(mouse_pos) else None,
+            next((key for key, rect in sidebar_tab_rects.items() if rect.collidepoint(mouse_pos)), None),
             follow_character_id,
+            scroll_offset=sidebar_scroll,
+            speed_text=f"{speed_multiplier:g}",
         )
         frame_surface.blit(sidebar_surface, (SCREEN_WIDTH, 0))
         screen.blit(frame_surface, (0, 0))
