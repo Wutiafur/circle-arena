@@ -5343,9 +5343,10 @@ class DesignEffect:
                 target.take_damage(self.data.get("damage", 60.0), source=self.owner, damage_type="design_spell_aurora", game_state=game_state)
                 if hasattr(target, "apply_blind"):
                     target.apply_blind(self.data.get("blind", 2.0))
-                target.design_aurora_burn = AURORA_BURN_STACKS
-                target.design_aurora_burn_timer = 0.0
-                target.design_aurora_burn_source = self.owner
+                if isinstance(target, Character):
+                    target.design_aurora_burn = AURORA_BURN_STACKS
+                    target.design_aurora_burn_timer = 0.0
+                    target.design_aurora_burn_source = self.owner
 
             self.affect_targets(game_state, in_radius, first_hit)
             if not point_inside_arena(self.pos, self.radius + 4):
