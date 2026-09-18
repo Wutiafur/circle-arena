@@ -1,0 +1,66 @@
+Circle Crash Report
+Time: 2026-09-18T13:35:06
+Python: 3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:48:34) [MSC v.1929 64 bit (AMD64)]
+Pygame: 2.6.1
+Executable: D:\miniconda\pythonw.exe
+Working Directory: C:\Users\76009\Desktop\myselfgame\circle
+Game File: C:\Users\76009\Desktop\myselfgame\circle\main.py
+
+Settings:
+{
+  "volume": 70,
+  "effects_quality": "high",
+  "skip_entrance": false,
+  "fullscreen": false
+}
+
+Last Battle Snapshot:
+elapsed_time: 21.52 s
+speed_multiplier: 1
+pause: False
+total_characters: 19  alive: 19
+projectiles: 0  design_effects: 2
+weapon_orbs: 0  kill_banners: 0
+  DesignRole103_susanoo        hp=   826.0/   850.0 mp= 100.0 pos=( 134.12, 361.08) damageDealt=364 damageTaken=24
+  DesignRole81_architect       hp=   895.0/  1000.0 mp= 100.0 pos=( 469.62, 140.87) damageDealt=149 damageTaken=105
+  DesignRole63_executioner     hp=  1058.0/  1300.0 mp=   0.0 pos=( 148.02, 722.41) damageDealt=280 damageTaken=242
+  DesignRole44_beastmaster     hp=   600.4/   850.0 mp= 100.0 pos=( 474.51, 349.00) damageDealt=230 damageTaken=250
+  DesignRole59_ranger          hp=   596.0/   650.0 mp=  23.0 pos=( 625.64, 413.94) damageDealt=208 damageTaken=54
+  DesignRole57_gambler         hp=   405.3/   750.0 mp=  40.0 pos=( 598.16, 219.60) damageDealt=799 damageTaken=345
+  Gladiator                    hp=   968.0/  1300.0 mp=  85.0 pos=( 673.25, 510.54) damageDealt=474 damageTaken=332
+  DesignRole64_dreamweaver     hp=   127.4/   600.0 mp= 100.0 pos=( 344.29, 255.40) damageDealt=56 damageTaken=473
+  DesignRole80_chrono_thief    hp=   325.5/   650.0 mp=   0.0 pos=( 178.34, 755.00) damageDealt=214 damageTaken=324
+  Bloodwraith                  hp=   712.0/  1000.0 mp=   0.0 pos=( 683.48, 329.19) damageDealt=204 damageTaken=288
+  DesignRole100_xuanwu         hp=   592.5/   720.0 mp=  20.0 pos=( 357.38, 703.06) damageDealt=267 damageTaken=7
+  DesignRole43_phantom         hp=   194.9/   400.0 mp=   0.0 pos=( 380.52, 274.63) damageDealt=130 damageTaken=205
+  DesignRole105_flame_dancer   hp=    79.0/   720.0 mp=  70.9 pos=( 314.09, 710.25) damageDealt=306 damageTaken=641
+  Necromancer                  hp=   534.5/   800.0 mp=   0.0 pos=( 339.77, 752.10) damageDealt=450 damageTaken=338
+  DesignRole48_corsair         hp=   694.0/   750.0 mp=  77.4 pos=( 446.80, 497.87) damageDealt=172 damageTaken=56
+  Succubus                     hp=   205.5/   652.0 mp=  80.0 pos=( 692.69, 374.25) damageDealt=256 damageTaken=446
+  DesignRole67_martial_artist  hp=   650.0/   900.0 mp=  80.0 pos=( 614.34, 533.70) damageDealt=140 damageTaken=250
+  Berserker                    hp=  1044.5/  1200.0 mp=  89.8 pos=( 300.43, 236.25) damageDealt=928 damageTaken=659
+  DesignRole62_lich            hp=   260.5/   700.0 mp=  60.0 pos=( 627.95, 491.91) damageDealt=196 damageTaken=440
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 13300, in <module>
+    main()
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 13279, in main
+    result = battle_loop(
+             ^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 13137, in battle_loop
+    character.update(sim_dt, game_state)
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 10975, in update
+    self.process_effects(dt, game_state)
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 10959, in process_effects
+    self.cast_skill(game_state)
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 9805, in cast_skill
+    if cast_design_skill(self, game_state):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 6971, in cast_design_skill
+    prey = max(living, key=lambda e: (e.design_susanoo_prowl, -((e.pos - caster.pos).length_squared())))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\76009\Desktop\myselfgame\circle\main.py", line 6971, in <lambda>
+    prey = max(living, key=lambda e: (e.design_susanoo_prowl, -((e.pos - caster.pos).length_squared())))
+                                      ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Summon' object has no attribute 'design_susanoo_prowl'

@@ -5825,6 +5825,7 @@ class DesignSummon:
             self.attack_type = "ranged"
             self.projectile_speed = 290.0
             self.attack_range = 240.0
+            self.attack_interval = 3.0
             self.attack_cooldown = 3.0
         elif summon_type == "sailor":
             self.shape = "diamond"
@@ -5838,6 +5839,7 @@ class DesignSummon:
             self.attack_type = "ranged"
             self.projectile_speed = 300.0
             self.attack_range = 220.0
+            self.attack_interval = 0.9
             self.attack_cooldown = 0.9
         elif summon_type == "spirit":
             source = source_character or owner
@@ -5879,6 +5881,7 @@ class DesignSummon:
             self.speed = 150.0
             self.lifetime = DESIGN_LARVA_DURATION
             self.attack_type = "melee"
+            self.attack_interval = 1.0
             self.projectile_speed = 0.0
             self.attack_range = 24.0
             self.attack_damage_kind = DAMAGE_KIND_PHYSICAL
@@ -6055,7 +6058,7 @@ class DesignSummon:
                 target.take_damage(self.damage, source=self.owner, damage_type="design_physical_summon", game_state=game_state)
                 if self.summon_type == "wolf" and random.random() < 0.25 and hasattr(target, "apply_bleed"):
                     target.apply_bleed(1)
-                self.attack_cooldown = max(0.1, self.attack_interval)
+                self.attack_cooldown = max(0.1, float(getattr(self, "attack_interval", 1.0)))
                 if self.summon_type == "larva":
                     self.alive = False
         else:
@@ -6082,7 +6085,7 @@ class DesignSummon:
                             max_range=self.attack_range,
                         )
                     )
-                self.attack_cooldown = 3.0 if self.summon_type == "drone" else 0.9
+                self.attack_cooldown = max(0.1, float(getattr(self, "attack_interval", 1.0)))
         self.pos.x = clamp(self.pos.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
         self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
         self.update_rect()
