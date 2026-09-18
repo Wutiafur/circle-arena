@@ -13847,7 +13847,7 @@ def main():
             apply_skip_entrance = False
         screen = pygame.display.set_mode((BATTLE_WINDOW_WIDTH, BATTLE_WINDOW_HEIGHT), BATTLE_WINDOW_FLAGS)
         prep_state = create_game_state(player_count, timed_weapon_orb_drops_enabled)
-        bet_job = bet_loop(screen, clock, title_font, small_font, button_font, prep_state)
+        bet_job = bet_loop(screen, clock, title_font, subtitle_font, small_font, button_font, prep_state)
         if bet_job is None:
             break
         if bet_job == "cancel":
