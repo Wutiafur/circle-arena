@@ -13046,6 +13046,7 @@ def bet_loop(screen, clock, title_font, subtitle_font, body_font, button_font, g
     characters = [c for c in game_state.get("battle_participants", game_state.get("characters", [])) if c.alive]
     if not characters:
         return "skip"
+    stats = load_win_rate_stats()
     grid_left, grid_top = 28, 150
     cols = 5
     cell_w, cell_h = 142, 62
@@ -13103,7 +13104,7 @@ def bet_loop(screen, clock, title_font, subtitle_font, body_font, button_font, g
             pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
         title = title_font.render("入场押注：猜本局冠军！猜中结算送上冠军称号", True, TEXT_COLOR)
         canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 66)))
-        hint = subtitle_font.render("点击角色头像押注 · 滚轮滚动 · 也可跳过或返回", True, (150, 164, 180))
+        hint = subtitle_font.render("点击角色头像押注 · 参考下方历史胜率 · 滚轮滚动 · 也可跳过或返回", True, (150, 164, 180))
         canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 100)))
         draw_panel(canvas, grid_panel, (16, 22, 30), radius=14)
 
@@ -13116,8 +13117,17 @@ def bet_loop(screen, clock, title_font, subtitle_font, body_font, button_font, g
             canvas.blit(name, (rect.left + 50, rect.top + 8))
             num = subtitle_font.render(f"#{get_role_display_number(char.job_name)}", True, (150, 164, 180))
             canvas.blit(num, (rect.left + 50, rect.top + 30))
-            tag = subtitle_font.render(data.get("display_attack_tag", ""), True, (180, 200, 230))
-            canvas.blit(tag, (rect.left + 50, rect.top + 44))
+            entry = stats.get(char.job_name, {})
+            matches = max(0, int(entry.get("matches", 0)))
+            if matches >= 1:
+                wr = max(0.0, int(entry.get("wins", 0))) / matches * 100.0
+                win_text = f"{wr:.0f}% · {matches}场"
+                win_color = (120, 210, 160) if wr >= 50.0 else (220, 120, 110)
+            else:
+                win_text = "暂无战绩"
+                win_color = (110, 124, 142)
+            win_surface = subtitle_font.render(win_text, True, win_color)
+            canvas.blit(win_surface, (rect.left + 50, rect.top + 44))
 
         for rect, text in ((skip_rect, "不押注，直接战斗"), (cancel_rect, "返回主菜单")):
             hover = mouse_pos is not None and rect.collidepoint(mouse_pos)
