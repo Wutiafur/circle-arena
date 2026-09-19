@@ -756,9 +756,12 @@ KILLSTREAK_GAIN_DURATION = 6.0
 KILLSTREAK_GAIN_DAMAGE = {1: 0.15, 2: 0.25, 3: 0.40}
 KILLSTREAK_GAIN_HEAL = {2: 0.15, 3: 0.25}
 RANGER_MARK_MAX = 3
-RANGER_MARK_DAMAGE_BONUS = 0.08
+RANGER_MARK_DAMAGE_BONUS = 0.10
 RANGER_DASH_SPEED_DURATION = 0.5
 RANGER_DASH_SPEED_BONUS = 0.2
+RANGER_LOCK_DURATION = 4.0
+RANGER_LOCK_DAMAGE_MULTIPLIER = 1.5
+RANGER_ARROW_DAMAGE = 14.0
 SHADOW_VALUE_MAX = 3
 SHADOW_WALTZ_THROW_RATIO = 1.5
 SHADOW_WALTZ_AOE_RADIUS = 60.0
@@ -6540,7 +6543,7 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
     if role_num == 103:
         target.design_susanoo_prowl = min(SUSANOO_PROWL_MAX, target.design_susanoo_prowl + SUSANOO_PROWL_APPLY_ON_HIT)
     if role_num == 59:
-        target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + 1)
+        target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + 2)
     if role_num == 77:
         attacker.design_shadow_stacks = min(SHADOW_VALUE_MAX, attacker.design_shadow_stacks + 1)
         call_target_method(target, "apply_slow", 0.2, 1.0)
@@ -6610,6 +6613,8 @@ def fire_design_basic_attack(attacker, target, game_state):
     damage = attacker.get_current_basic_damage() * attacker.get_target_attack_bonus(target)
     if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.5:
         damage *= 1.2
+    if role_num == 59 and attacker.design_ranger_lock_timer > 0 and attacker.design_ranger_lock_target_id == target.id:
+        damage *= RANGER_LOCK_DAMAGE_MULTIPLIER
     if role_num == 57:
         damage = random.choice(attacker.config.get("attack_random_values", [damage]))
     if role_num == 53 and attacker.design_sentinel_lock:
@@ -7519,14 +7524,38 @@ def cast_design_skill(caster, game_state, token=None):
     elif token == "black_hole":
         add_design_effect(game_state, DesignEffect("black_hole", caster, ARENA_RECT.center, radius=120.0, lifetime=3.0, pull=55.0, damage=15.0))
     elif token == "arrow_rain":
-        direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
-        direction = direction.normalize()
-        caster.pos -= direction * 80.0
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        # 猎影锁魂：后跳拉开距离 + 锁定最近敌人(满印记+减速) + 三连穿透箭
+        away = caster.pos - target.pos
+        if away.length_squared() == 0:
+            away = random_unit_vector()
+        away = away.normalize()
+        caster.pos += away * 50.0
         caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
         caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
         caster.design_ranger_speed_timer = max(caster.design_ranger_speed_timer, RANGER_DASH_SPEED_DURATION)
-        for offset in (-24, -12, 0, 12, 24):
-            spawn_design_projectile(caster, game_state, direction.rotate(offset), 14.0, "design_physical_ranger", (160, 255, 180), max_range=320.0, pierce=True)
+        target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + RANGER_MARK_MAX)
+        target.apply_slow(0.4, 2.0)
+        caster.design_ranger_lock_target_id = target.id
+        caster.design_ranger_lock_timer = RANGER_LOCK_DURATION
+        aim = target.pos - caster.pos
+        if aim.length_squared() == 0:
+            aim = random_unit_vector()
+        aim = aim.normalize()
+        for offset_deg in (-16.0, 0.0, 16.0):
+            spawn_design_projectile(
+                caster,
+                game_state,
+                aim.rotate(offset_deg),
+                RANGER_ARROW_DAMAGE,
+                "design_physical_ranger",
+                (160, 255, 180),
+                max_range=320.0,
+                pierce=True,
+            )
+        return True
     elif token == "stone_skin":
         caster.clear_negative_states()
         caster.heal(80.0)
@@ -8113,6 +8142,8 @@ class Character:
         self.design_susanoo_prowl = 0
         self.design_ranger_mark = 0
         self.design_ranger_speed_timer = 0.0
+        self.design_ranger_lock_target_id = None
+        self.design_ranger_lock_timer = 0.0
         self.design_shadow_stacks = 0
         self.design_shadow_blade_pos = None
         self.design_element_stacks = 0
@@ -11006,6 +11037,10 @@ class Character:
             self.assassin_haste_timer = max(0.0, self.assassin_haste_timer - dt)
         if self.design_ranger_speed_timer > 0:
             self.design_ranger_speed_timer = max(0.0, self.design_ranger_speed_timer - dt)
+        if self.design_ranger_lock_timer > 0:
+            self.design_ranger_lock_timer = max(0.0, self.design_ranger_lock_timer - dt)
+            if self.design_ranger_lock_timer <= 0:
+                self.design_ranger_lock_target_id = None
         if self.doom_timer > 0:
             self.doom_timer = max(0.0, self.doom_timer - dt)
             self.take_damage(ELECTRO_DOOM_DPS * dt, source=self, damage_type="true_doom", game_state=game_state)
@@ -13054,6 +13089,9 @@ def describe_design_state(character):
     elif character.job_name == "DesignRole77_shadow_dancer":
         if character.design_shadow_idle >= 5.0:
             parts.append("影·蓄势")
+    elif character.design_meta.get("role_num") == 59:
+        if character.design_ranger_lock_timer > 0:
+            parts.append(f"猎魂{character.design_ranger_lock_timer:.0f}s")
     elif character.job_name == "DesignRole90_collector":
         if character.design_collect_fervor:
             parts.append(f"狂热{character.design_collect_fervor}")
