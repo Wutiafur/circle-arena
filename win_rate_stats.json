@@ -17,7 +17,7 @@
       "wins": 0
     },
     "Sniper": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Necromancer": {
@@ -33,7 +33,7 @@
       "wins": 0
     },
     "Bomber": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "Vampire": {
@@ -65,7 +65,7 @@
       "wins": 0
     },
     "Monk": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "Mech Armor": {
@@ -73,11 +73,11 @@
       "wins": 1
     },
     "Druid": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "Electro Trooper": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Puppeteer": {
@@ -97,7 +97,7 @@
       "wins": 0
     },
     "Shield Guard": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "Swordmaster": {
@@ -109,7 +109,7 @@
       "wins": 0
     },
     "Hexer": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "Chaos Demon": {
@@ -181,7 +181,7 @@
       "wins": 0
     },
     "DesignRole47_role": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole48_corsair": {
@@ -205,7 +205,7 @@
       "wins": 0
     },
     "DesignRole53_sentinel": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole54_jester": {
@@ -213,8 +213,8 @@
       "wins": 0
     },
     "DesignRole55_role": {
-      "matches": 4,
-      "wins": 0
+      "matches": 6,
+      "wins": 1
     },
     "DesignRole56_oracle": {
       "matches": 3,
@@ -229,7 +229,7 @@
       "wins": 0
     },
     "DesignRole59_ranger": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole60_golem": {
@@ -277,15 +277,15 @@
       "wins": 0
     },
     "DesignRole71_spellblade": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole72_soul_eater": {
-      "matches": 2,
+      "matches": 3,
       "wins": 1
     },
     "DesignRole73_illuminator": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole74_ghost_capt": {
@@ -357,7 +357,7 @@
       "wins": 0
     },
     "DesignRole93_twin_mirror": {
-      "matches": 4,
+      "matches": 5,
       "wins": 2
     },
     "Bloodwraith": {
@@ -365,7 +365,7 @@
       "wins": 2
     },
     "DesignRole91_phantom_lancer": {
-      "matches": 8,
+      "matches": 10,
       "wins": 0
     },
     "DesignRole92_soul_arbiter": {
