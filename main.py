@@ -2406,13 +2406,13 @@ PHANTOM_LANCER_JOB_NAME = "DesignRole91_phantom_lancer"
 JOB_DEFS[PHANTOM_LANCER_JOB_NAME] = {
     "shape": "slim_diamond",
     "color": (86, 224, 232),
-    "max_hp": 900.0,
+    "max_hp": 1150.0,
     "mp_mode": "distance_scaled",
     "mp_rate": 1.0,
     "attack_type": "melee",
     "attack_damage": 16.0,
     "attack_range": 46.0,
-    "attack_interval": 0.64,
+    "attack_interval": 0.60,
     "projectile_speed": 285.0,
     "move_speed": 160.0,
     "skill_id": "phantom_lancer_throw",
@@ -2425,7 +2425,7 @@ CHARACTER_DATA[PHANTOM_LANCER_JOB_NAME] = {
     "name": "Phantom Lancer",
     "shape": "slim_diamond",
     "color": (86, 224, 232),
-    "max_hp": 900.0,
+    "max_hp": 1150.0,
     "move_speed": 160.0,
     "attack_type": "melee",
     "attack_range": 46.0,
@@ -2433,13 +2433,13 @@ CHARACTER_DATA[PHANTOM_LANCER_JOB_NAME] = {
     "spell_resistance": 0.8,
     "mp_charge_style": "Gain 20% MP per 20 distance moved",
     "skill_name": "Wind-Touch / Lance Throw",
-    "skill_description": "Attack power scales with movement speed. Picking up Cold Spear turns the next basic attack into a short dash thrust for 200% damage and 40 HP healing, and grants 30% move speed for 5 seconds. The active skill throws Cold Spear behind the current target, dealing 15 damage and leaving it on the ground for 5 seconds.",
+    "skill_description": "Attack power scales with movement speed. Picking up Cold Spear grants 3 spear-charge thrusts (200% damage + 40 HP heal + 30% speed). While moving, takes 12% less damage. The active throws Cold Spear for 30 damage, slowing the target 30% for 2 seconds.",
 }
 POKEDEX_LOCALIZATION[PHANTOM_LANCER_JOB_NAME] = {
     "name": "绝影枪客",
     "mp_charge_style": "每移动 20 距离充能 20%",
     "skill_name": "追风之触 / 掷枪入阵",
-    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】后，下一次普攻会变为短距离突刺，造成 200% 伤害并回复 40 点生命值，同时自身 5 秒内移速提升 30%。主动技能会向当前目标身后掷出【冷锋枪】，命中造成 15 点伤害并插在地面持续 5 秒。",
+    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】获得 3 层枪意：每次普攻变为短距突刺（200% 伤害 + 回 40 血 + 5 秒 +30% 移速）。移动中受到的伤害 -12%。主动技能向当前目标掷出【冷锋枪】，造成 30 点伤害并使其减速 30% 持续 2 秒，长枪插地持续 5 秒。",
 }
 DESIGN_ROLE_METADATA[PHANTOM_LANCER_JOB_NAME] = {
     "role_num": 91,
@@ -6579,6 +6579,33 @@ def fire_design_basic_attack(attacker, target, game_state):
         return
     if target is None or not target.alive:
         return
+    if role_num == 91 and getattr(attacker, "phantom_lancer_spear_charges", 0) > 0:
+        # 枪意突刺（冷锋枪化为 3 层枪意，普攻变为短距冲刺突刺）
+        direction = target.pos - attacker.pos
+        if direction.length_squared() == 0:
+            return
+        direction = direction.normalize()
+        start_pos = pygame.Vector2(attacker.pos)
+        dash_distance = min(42.0, max(18.0, (target.pos - attacker.pos).length() - (target.radius + attacker.radius + 2.0)))
+        attacker.pos += direction * dash_distance
+        attacker.pos.x = clamp(attacker.pos.x, ARENA_RECT.left + attacker.radius, ARENA_RECT.right - attacker.radius)
+        attacker.pos.y = clamp(attacker.pos.y, ARENA_RECT.top + attacker.radius, ARENA_RECT.bottom - attacker.radius)
+        attacker.update_rect()
+        game_state["melee_effects"].append(MeleeSwingEffect(start_pos, attacker.pos + direction * (target.radius + 10), attacker.get_visual_color()))
+        game_state["beam_events"].append(BeamEvent(start_pos, attacker.pos, (86, 224, 232)))
+        thrust_damage = attacker.get_current_basic_damage() * 2.0 * attacker.get_target_attack_bonus(target)
+        dealt = target.take_damage(thrust_damage, source=attacker, damage_type="basic_melee", game_state=game_state)
+        if dealt > 0:
+            spawn_attack_impact(game_state, target.pos, (86, 224, 232), radius=12, thickness=2, burst_count=6)
+            attacker.heal(40.0)
+        attacker.phantom_lancer_spear_charges -= 1
+        attacker.phantom_lancer_throw_speed_timer = PHANTOM_LANCER_THROW_SPEED_DURATION
+        attacker.phantom_lancer_spear_hunt_timer = max(getattr(attacker, "phantom_lancer_spear_hunt_timer", 0.0), PHANTOM_LANCER_SPEAR_HUNT_DURATION)
+        if random.random() < 0.5:
+            cast_design_skill(attacker, game_state, "phantom_lancer_throw")
+        attacker.attack_cooldown = attacker.get_basic_attack_cooldown()
+        attacker.on_attack_committed()
+        return
     repeats = max(1, int(attacker.config.get("attack_repeat", 1)))
     damage = attacker.get_current_basic_damage() * attacker.get_target_attack_bonus(target)
     if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.5:
@@ -7402,7 +7429,9 @@ def cast_design_skill(caster, game_state, token=None):
             offset = target.pos - caster.pos
             if offset.length_squared() > 0:
                 direction = offset.normalize()
-                target.take_damage(caster.get_current_basic_damage() * 2.0, source=caster, damage_type="design_physical_spear_throw", game_state=game_state)
+                target.take_damage(30.0, source=caster, damage_type="design_physical_spear_throw", game_state=game_state)
+                target.apply_slow(0.3, 2.0)
+                spawn_attack_impact(game_state, target.pos, (86, 224, 232), radius=12, thickness=2, burst_count=8)
         if direction.length_squared() == 0:
             direction = pygame.Vector2(1, 0)
         landing_pos = caster.pos + direction * 120.0
@@ -7930,6 +7959,7 @@ class Character:
         self.bloodwraith_shield_hp = 0.0
         self.phantom_lancer_throw_speed_timer = 0.0
         self.phantom_lancer_spear_hunt_timer = 0.0
+        self.phantom_lancer_spear_charges = 0
         self.soul_arbiter_hunt_timer = 0.0
         self.soul_arbiter_chains = {}
         self.hit_flash_timer = 0.0
@@ -8511,7 +8541,7 @@ class Character:
                 damage *= 1.2
         if self.job_name == "DesignRole91_phantom_lancer":
             speed_ratio = (self.move_speed * self.get_speed_modifier()) / 100.0
-            damage += max(0.0, speed_ratio - 1.0) * 45.0
+            damage += max(0.0, speed_ratio - 1.0) * 60.0
         if self.is_phoenix():
             damage += (self.design_phoenix_feather // PHOENIX_FEATHER_PER_BONUS) * PHOENIX_FEATHER_DAMAGE_BONUS
         if self.is_tiger() and random.random() < TIGER_CRIT_CHANCE:
@@ -9446,6 +9476,9 @@ class Character:
             "ammo": weapon_def["ammo"],
             "cooldown": 0.0,
         }
+        if self.job_name == "DesignRole91_phantom_lancer" and weapon_orb.weapon_id == "ColdSpear":
+            self.phantom_lancer_spear_charges = 3
+            self.clear_weapon()  # 冷锋枪立即化为枪意，普攻转为突刺
         weapon_orb.alive = False
         if self.config["mp_mode"] == "weapon_pickup":
             self.gain_mp(self.config["mp_rate"], "weapon_pickup")
@@ -9507,6 +9540,8 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
+        if self.job_name == "DesignRole91_phantom_lancer" and self.vel.length() > 30.0 and not is_true_damage:
+            damage *= 0.88
         source_character = None
         if isinstance(source, Character):
             source_character = source
@@ -10155,6 +10190,10 @@ class Character:
                 self.heal(40.0)
                 self.phantom_lancer_throw_speed_timer = PHANTOM_LANCER_THROW_SPEED_DURATION
                 self.phantom_lancer_spear_hunt_timer = max(self.phantom_lancer_spear_hunt_timer, PHANTOM_LANCER_SPEAR_HUNT_DURATION)
+                if self.phantom_lancer_spear_charges <= 1:
+                    self.clear_weapon()
+                if self.phantom_lancer_spear_charges > 0:
+                    self.phantom_lancer_spear_charges -= 1
                 if random.random() < 0.5:
                     cast_design_skill(self, game_state, "phantom_lancer_throw")
         elif self.held_weapon["weapon_id"] == "Staff":
