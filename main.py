@@ -4078,7 +4078,7 @@ def get_active_equilibrium_arbiter(game_state, exclude_owner_id=None):
     return None
 
 
-def spawn_damage_text(game_state, target, amount, damage_kind=None, is_true_damage=False, text=None, color=None):
+def spawn_damage_text(game_state, target, amount, damage_kind=None, is_true_damage=False, text=None, color=None, crit=False):
     if game_state is None or target is None:
         return
     offset = pygame.Vector2(0, -getattr(target, "radius", CHARACTER_RADIUS) - 10)
@@ -4087,7 +4087,7 @@ def spawn_damage_text(game_state, target, amount, damage_kind=None, is_true_dama
     for existing in reversed(game_state["damage_texts"][-6:]):
         if existing.alive and (DAMAGE_TEXT_DURATION - existing.lifetime) < merge_window:
             if (existing.pos - new_pos).length() < 16.0:
-                existing.add_amount(amount, text=text)
+                existing.add_amount(amount, text=text, crit=crit)
                 return
     game_state["damage_texts"].append(
         DamageText(
@@ -4097,6 +4097,7 @@ def spawn_damage_text(game_state, target, amount, damage_kind=None, is_true_dama
             is_true_damage=is_true_damage,
             text=text,
             color=color,
+            crit=crit,
         )
     )
 
@@ -4157,18 +4158,26 @@ def handle_equilibrium_thresholds(target, pre_damage_hp, source_character, game_
             break
 
 
+DAMAGE_TEXT_CRIT_THRESHOLD = 40.0
+SKILL_PRECAST_DURATION = 0.4
+HEAL_TEXT_COLOR = (110, 230, 150)
+
+
 class DamageText:
-    def __init__(self, pos, amount, damage_kind=None, is_true_damage=False, text=None, color=None):
+    def __init__(self, pos, amount, damage_kind=None, is_true_damage=False, text=None, color=None, crit=False):
         self.pos = pygame.Vector2(pos)
         self.amount = max(1, int(round(amount)))
         self.text = text if text is not None else f"-{self.amount}"
         self.color = color if color is not None else get_damage_text_color(damage_kind, is_true_damage)
+        self.crit = crit
         self.lifetime = DAMAGE_TEXT_DURATION
         self.alive = True
 
-    def add_amount(self, amount, text=None):
+    def add_amount(self, amount, text=None, crit=False):
         self.amount += max(1, int(round(amount)))
         self.text = text if text is not None else f"-{self.amount}"
+        if crit:
+            self.crit = True
         self.lifetime = DAMAGE_TEXT_DURATION
 
     def update(self, dt):
@@ -4179,6 +4188,20 @@ class DamageText:
 
     def draw(self, surface, font):
         alpha = int(255 * clamp(self.lifetime / DAMAGE_TEXT_DURATION, 0.0, 1.0))
+        if self.crit:
+            age = DAMAGE_TEXT_DURATION - self.lifetime
+            scale = 1.7 - 0.7 * clamp(age / 0.10, 0.0, 1.0)
+            text_surface = font.render(self.text, True, (255, 224, 120))
+            text_surface.set_alpha(alpha)
+            w, h = text_surface.get_size()
+            scaled_size = (max(1, int(w * scale)), max(1, int(h * scale)))
+            glow_surface = pygame.transform.smoothscale(font.render(self.text, True, (255, 170, 40)), scaled_size)
+            glow_surface.set_alpha(max(0, alpha // 2))
+            text_surface = pygame.transform.smoothscale(text_surface, scaled_size)
+            center = (round(self.pos.x), round(self.pos.y))
+            surface.blit(glow_surface, glow_surface.get_rect(center=(center[0] + 1, center[1] + 2)))
+            surface.blit(text_surface, text_surface.get_rect(center=center))
+            return
         text = font.render(self.text, True, self.color)
         text.set_alpha(alpha)
         surface.blit(text, text.get_rect(center=(round(self.pos.x), round(self.pos.y))))
@@ -4344,18 +4367,45 @@ class MeleeSwingEffect:
         angle = math.degrees(math.atan2(direction.y, direction.x))
         center = (self.start_pos + self.end_pos) * 0.5
         arc_radius = max(20, int(length * 0.58))
-        overlay = pygame.Surface((arc_radius * 5, arc_radius * 5), pygame.SRCALPHA)
+        overlay = pygame.Surface((arc_radius * 6, arc_radius * 6), pygame.SRCALPHA)
         overlay_center = (overlay.get_width() // 2, overlay.get_height() // 2)
         arc_rect = pygame.Rect(0, 0, arc_radius * 2, arc_radius * 2)
         arc_rect.center = overlay_center
-        shadow_color = (*shade_color(self.color, 0.35), max(36, alpha // 2))
-        glow_color = (*mix_color(self.color, (255, 255, 255), 0.34), alpha)
-        core_color = (*self.color, alpha)
-        pygame.draw.arc(overlay, shadow_color, arc_rect.inflate(8, 8), math.radians(205), math.radians(334), 7)
-        pygame.draw.arc(overlay, glow_color, arc_rect, math.radians(210), math.radians(330), 4)
+        sweep_start = math.radians(198)
+        sweep_end = math.radians(342)
+        # 残影层：三层同心弧（外宽内窄），形成挥动残影
+        for layer_index, (scale_f, alpha_mul, width) in enumerate(((0.94, 0.30, 5), (1.0, 0.62, 6), (1.07, 1.0, 7))):
+            layer_rect = pygame.Rect(0, 0, int(arc_radius * 2 * scale_f), int(arc_radius * 2 * scale_f))
+            layer_rect.center = overlay_center
+            layer_alpha = int(alpha * alpha_mul)
+            pygame.draw.arc(
+                overlay,
+                (*mix_color(self.color, (255, 255, 255), 0.22), max(18, layer_alpha)),
+                layer_rect,
+                sweep_start,
+                sweep_end,
+                width,
+            )
+        # 亮核月牙（实心带：外弧-内弧多边形）
+        core_radius = arc_radius * 1.0
+        inner_radius = arc_radius * 0.78
+        mid_angle = (sweep_start + sweep_end) / 2.0
+        half_sweep = (sweep_end - sweep_start) / 2.0
+        steps = 10
+        outer_points = [
+            pygame.Vector2(overlay_center) + pygame.Vector2(math.cos(a), math.sin(a)) * core_radius
+            for a in [mid_angle - half_sweep + (sweep_end - sweep_start) * i / steps for i in range(steps + 1)]
+        ]
+        inner_points = [
+            pygame.Vector2(overlay_center) + pygame.Vector2(math.cos(a), math.sin(a)) * inner_radius
+            for a in [mid_angle + half_sweep - (sweep_end - sweep_start) * i / steps for i in range(steps + 1)]
+        ]
+        crescent_poly = [(round(p.x), round(p.y)) for p in outer_points + inner_points]
+        pygame.draw.polygon(overlay, (*mix_color(self.color, (255, 255, 255), 0.45), int(alpha * 0.8)), crescent_poly)
+        # 高光尾尖
         tip_start = pygame.Vector2(overlay_center) + pygame.Vector2(arc_radius * 0.15, -arc_radius * 0.18)
         tip_end = pygame.Vector2(overlay_center) + pygame.Vector2(arc_radius * 0.78, arc_radius * 0.12)
-        pygame.draw.line(overlay, core_color, tip_start, tip_end, 3)
+        pygame.draw.line(overlay, (*mix_color(self.color, (255, 255, 255), 0.7), max(60, alpha)), tip_start, tip_end, 3)
         sparkle = [
             (overlay_center[0] + arc_radius * 0.42, overlay_center[1] - arc_radius * 0.08),
             (overlay_center[0] + arc_radius * 0.58, overlay_center[1] - arc_radius * 0.26),
@@ -4465,6 +4515,15 @@ class Projectile:
         self.lifetime = PROJECTILE_LIFETIME
         self.alive = True
         self.hit_ids = set()
+        source_kind_str = str(source_kind)
+        if source_kind_str.startswith("true_"):
+            self.trail_style = "white"
+        elif any(t in source_kind_str for t in ("mortar", "shell", "cannon", "broadside", "powder", "rock", "comet", "flare", "bomb")):
+            self.trail_style = "flame"
+        elif self.spell_trail:
+            self.trail_style = "glow"
+        else:
+            self.trail_style = "thin"
 
     def explode(self, game_state):
         if not self.alive:
@@ -4586,7 +4645,7 @@ class Projectile:
                 if dealt > 0 and callable(self.on_hit):
                     self.on_hit(self, target, dealt, game_state)
                 if dealt > 0:
-                    spawn_attack_impact(game_state, target.pos, self.color, radius=max(10, int(self.radius * 2.8)))
+                    spawn_attack_impact(game_state, target.pos, self.color, radius=max(10, int(self.radius * 2.8)), damage=dealt)
                 self.hit_ids.add(object_id)
                 if not self.pierce:
                     self.alive = False
@@ -4612,20 +4671,46 @@ class Projectile:
         center_local = (round(self.pos.x - min_x), round(self.pos.y - min_y))
         if self.prev_pos.distance_squared_to(self.pos) > 0:
             prev_local = (round(self.prev_pos.x - min_x), round(self.prev_pos.y - min_y))
-            pygame.draw.line(
-                overlay,
-                trail_color,
-                prev_local,
-                center_local,
-                max(2, self.radius * 2),
-            )
-            pygame.draw.line(
-                overlay,
-                (*mix_color(self.color, (255, 255, 255), 0.3), max(72, trail_alpha)),
-                prev_local,
-                center_local,
-                max(1, self.radius),
-            )
+            if self.trail_style == "flame":
+                flame_layers = ((max(2, self.radius * 3), 0.45, 0.10), (max(1, self.radius * 2), 0.72, 0.24), (1, 1.0, 0.5))
+                for width, alpha_mul, white_mix in flame_layers:
+                    pygame.draw.line(
+                        overlay,
+                        (*mix_color(self.color, (255, 255, 255), white_mix), int(trail_alpha * alpha_mul)),
+                        prev_local,
+                        center_local,
+                        width,
+                    )
+            elif self.trail_style == "white":
+                pygame.draw.line(
+                    overlay,
+                    (*mix_color(self.color, (255, 255, 255), 0.85), int(trail_alpha * 0.55)),
+                    prev_local,
+                    center_local,
+                    max(2, self.radius * 2),
+                )
+                pygame.draw.line(
+                    overlay,
+                    (*mix_color(self.color, (255, 255, 255), 0.95), trail_alpha),
+                    prev_local,
+                    center_local,
+                    max(1, self.radius),
+                )
+            else:
+                pygame.draw.line(
+                    overlay,
+                    trail_color,
+                    prev_local,
+                    center_local,
+                    max(2, self.radius * 2),
+                )
+                pygame.draw.line(
+                    overlay,
+                    (*mix_color(self.color, (255, 255, 255), 0.3), max(72, trail_alpha)),
+                    prev_local,
+                    center_local,
+                    max(1, self.radius),
+                )
             pygame.draw.circle(overlay, (*mix_color(self.color, (255, 255, 255), 0.45), max(80, trail_alpha)), center_local, self.radius + 3)
         if self.visual_shape == "crescent":
             blade_radius = max(6, self.radius + 3)
@@ -5688,6 +5773,20 @@ class DesignEffect:
             center = (round(self.pos.x), round(self.pos.y))
             pygame.draw.circle(overlay, (*EQUILIBRIUM_PULSE_COLOR, max(36, alpha)), center, ring_radius, 3)
             pygame.draw.circle(overlay, (*EQUILIBRIUM_MARK_GLOW, max(24, alpha // 2)), center, max(2, ring_radius - 6), 1)
+        elif self.effect_type == "skill_precast":
+            progress = clamp(1.0 - self.lifetime / max(0.1, SKILL_PRECAST_DURATION), 0.0, 1.0)
+            alpha = int(210 * (1.0 - progress))
+            center = (round(self.pos.x), round(self.pos.y))
+            outer_r = round(self.radius * (2.4 - 1.4 * progress))
+            pygame.draw.circle(overlay, (255, 226, 130, max(24, alpha)), center, outer_r, 3)
+            pygame.draw.circle(overlay, (255, 250, 220, max(16, alpha // 2)), center, max(2, outer_r - 5), 1)
+            inner_r = round(self.radius * (0.4 + 0.8 * progress))
+            pygame.draw.circle(overlay, (255, 240, 180, max(30, alpha)), center, inner_r, 2)
+            for i in range(4):
+                orbit_angle = self.timer * 5.0 + math.tau * i / 4
+                orbit_r = max(2.0, self.radius * (2.6 - 2.2 * progress))
+                dot = pygame.Vector2(center) + pygame.Vector2(math.cos(orbit_angle), math.sin(orbit_angle)) * orbit_r
+                pygame.draw.circle(overlay, (255, 255, 220, max(40, alpha)), (round(dot.x), round(dot.y)), 2)
         elif self.effect_type == "valkyrie_landing":
             progress = clamp(1.0 - self.lifetime / max(0.1, VALKYRIE_LANDING_LIFETIME), 0.0, 1.0)
             alpha = int(230 * (1.0 - progress))
@@ -6184,7 +6283,21 @@ def add_design_effect(game_state, effect):
     game_state["design_effects"].append(effect)
 
 
-def spawn_attack_impact(game_state, pos, color, radius=14, thickness=3, lifetime=0.16, burst_count=6):
+def spawn_attack_impact(game_state, pos, color, radius=14, thickness=3, lifetime=0.16, burst_count=6, damage=None):
+    if damage is not None and damage >= 35:
+        radius = radius * 1.5
+        thickness += 2
+        lifetime = max(lifetime, 0.24)
+        burst_count = 10
+        game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.12)
+        game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 5.0)
+    elif damage is not None and damage >= 15:
+        radius = radius * 1.22
+        thickness += 1
+        lifetime = max(lifetime, 0.2)
+        burst_count = 8
+        game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.06)
+        game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 3.0)
     game_state["attack_fx"].append(
         AttackImpactEffect(
             pos,
@@ -9157,6 +9270,19 @@ class Character:
                 self.paladin_holy_stacks += 1
             if self.paladin_holy_stacks > 0:
                 self.paladin_holy_timer = 8.0
+        if healed >= 5 and _LIVE_GAME_STATE is not None:
+            spawn_damage_text(_LIVE_GAME_STATE, self, healed, text=f"+{int(round(healed))}", color=HEAL_TEXT_COLOR)
+            heal_particles = _LIVE_GAME_STATE.setdefault("spell_trail_particles", [])
+            for _ in range(2):
+                heal_particles.append(
+                    SpellTrailParticle(
+                        self.pos + pygame.Vector2(0, -self.radius - 8),
+                        (110, 230, 150),
+                        velocity=pygame.Vector2(random.uniform(-10, 10), random.uniform(-42, -14)),
+                        size=2,
+                        lifetime=0.45,
+                    )
+                )
         return healed
 
     def gain_mp(self, amount, reason):
@@ -9424,6 +9550,7 @@ class Character:
                     damage,
                     damage_kind=damage_kind,
                     is_true_damage=is_true_damage,
+                    crit=is_true_damage or damage >= DAMAGE_TEXT_CRIT_THRESHOLD,
                 )
             )
         if self.hp <= 0:
@@ -9507,6 +9634,30 @@ class Character:
                         heal_ratio = KILLSTREAK_GAIN_HEAL.get(buff_level, 0.0)
                         if heal_ratio > 0:
                             source_character.heal(source_character.max_hp * heal_ratio)
+                    if game_state is not None:
+                        spawn_attack_impact(
+                            game_state,
+                            source_character.pos,
+                            (255, 224, 120),
+                            radius=20,
+                            thickness=3,
+                            lifetime=0.3,
+                            burst_count=10,
+                        )
+                        kill_sparks = game_state.setdefault("spell_trail_particles", [])
+                        for _ in range(5):
+                            spark_dir = random_unit_vector() * random.uniform(60.0, 150.0)
+                            kill_sparks.append(
+                                SpellTrailParticle(
+                                    pygame.Vector2(self.pos),
+                                    (255, 224, 120) if _ % 2 == 0 else (255, 170, 40),
+                                    velocity=spark_dir,
+                                    size=2,
+                                    lifetime=0.5,
+                                )
+                            )
+                        game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.1)
+                        game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 6.0)
                 self.kill_streak = 0
         if damage > 0:
             if count_on_damage_dealt and source_character is not None and source_character.owner_id != self.owner_id:
@@ -9723,7 +9874,7 @@ class Character:
             target.apply_blind(1.2 + 0.2 * self.ninja_shadow_stacks)
             self.ninja_shadow_stacks = 0
             self.ninja_shadow_timer = 0.0
-        spawn_attack_impact(game_state, target.pos, self.get_visual_color(), radius=max(11, int(self.radius * 1.1)))
+        spawn_attack_impact(game_state, target.pos, self.get_visual_color(), radius=max(11, int(self.radius * 1.1)), damage=damage)
         stun_duration = self.get_current_melee_stun_duration()
         if stun_duration > 0:
             target.apply_stun(stun_duration)
@@ -9895,6 +10046,16 @@ class Character:
                 return
             if cast_design_skill(self, game_state):
                 self.mp = 0.0
+                add_design_effect(
+                    game_state,
+                    DesignEffect(
+                        "skill_precast",
+                        self,
+                        pygame.Vector2(self.pos),
+                        radius=self.radius + 10,
+                        lifetime=SKILL_PRECAST_DURATION,
+                    ),
+                )
             return
         if self.stun_timer > 0 and skill_id != "time_rewind":
             return
