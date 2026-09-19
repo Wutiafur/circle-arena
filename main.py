@@ -729,6 +729,27 @@ SOUL_SLASH_CRIT_COLOR = (255, 208, 54)
 SOUL_BLADE_COLOR = (116, 176, 232)
 SOUL_BLADE_PHYSICAL_REDUCTION = 0.50
 SOUL_BLADE_TRUE_DAMAGE_INCREASE = 1.00
+# 110 噬魂蝶母
+SOUL_MOTH_JOB_NAME = "DesignRole110_soul_moth"
+SOUL_MOTH_MOTH_SOUL_LIMIT = 3
+SOUL_MOTH_MOTH_DURATION = 10.0
+SOUL_MOTH_POISON_CHANCE_NORMAL = 0.20
+SOUL_MOTH_POISON_CHANCE_FORM = 0.40
+SOUL_MOTH_LIFESTEAL_RATIO = 0.10
+SOUL_MOTH_TRUE_RATIO = 0.03
+SOUL_MOTH_EVADE_CHANCE = 0.15
+SOUL_MOTH_FORM_ATTACK_DAMAGE = 8.0
+SOUL_MOTH_FORM_ACCELERATION = 0.9
+SOUL_MOTH_FORM_MOVE_BONUS = 0.16
+SOUL_MOTH_FORM_PHYS_RESIST_DELTA = 0.10
+SOUL_MOTH_SILK_DAMAGE = 30.0
+SOUL_MOTH_SILK_DRAG = 60.0
+SOUL_MOTH_SILK_ROOT_DURATION = 1.5
+SOUL_MOTH_FLUTTER_TARGETS = 3
+SOUL_MOTH_FLUTTER_DAMAGE = 25.0
+SOUL_MOTH_FLUTTER_CONFUSE_DURATION = 1.0
+SOUL_MOTH_COLOR = (122, 100, 214)
+SOUL_MOTH_FORM_COLOR = (232, 202, 120)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3599,6 +3620,15 @@ def draw_shape_icon(surface, shape, color, center, radius, outline=True):
         pygame.draw.circle(surface, color, center, round(radius))
         pygame.draw.rect(surface, BACKGROUND_COLOR, (rect.left - 2, center[1], rect.width + 4, radius + 4))
         pygame.draw.line(surface, color, (center[0] - radius, center[1]), (center[0] + radius, center[1]), max(3, int(radius * 0.2)))
+    elif shape == "butterfly":
+        wing_r = max(3, int(radius * 0.42))
+        left_wing = (center[0] - int(radius * 0.5), center[1])
+        right_wing = (center[0] + int(radius * 0.5), center[1])
+        pygame.draw.circle(surface, color, left_wing, wing_r)
+        pygame.draw.circle(surface, color, right_wing, wing_r)
+        pygame.draw.line(surface, color, (center[0], center[1] - int(radius * 0.6)), (center[0], center[1] + int(radius * 0.6)), max(2, int(radius * 0.3)))
+        pygame.draw.circle(surface, BORDER_COLOR, left_wing, wing_r, 1)
+        pygame.draw.circle(surface, BORDER_COLOR, right_wing, wing_r, 1)
     elif shape == "crescent":
         pygame.draw.circle(surface, color, center, round(radius))
         cutout_center = (round(center[0] + radius * 0.34), round(center[1] - radius * 0.08))
@@ -6545,6 +6575,8 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
 
 def fire_design_basic_attack(attacker, target, game_state):
     role_num = attacker.design_meta.get("role_num")
+    if getattr(attacker, "design_confuse_timer", 0.0) > 0:
+        return
     if target is None or not target.alive:
         return
     repeats = max(1, int(attacker.config.get("attack_repeat", 1)))
@@ -6855,6 +6887,58 @@ def fire_design_basic_attack(attacker, target, game_state):
                 max_range=attacker.get_current_attack_range(),
                 on_hit=lambda proj, tgt, dealt, hgs: apply_design_hit_effects(attacker, tgt, hgs, False),
             )
+        elif role_num == 110:  # 噬魂蝶母：常态蚀鳞粉 / 幻蝶形态双发幻蝶
+            form_active = getattr(attacker, "design_soul_moth_form", False)
+            if form_active:
+                for shot_index in range(2):
+                    shot_dir = direction.rotate(-14.0 if shot_index == 0 else 14.0)
+
+                    def moth_form_hit(proj, tgt, dealt, hgs):
+                        if dealt <= 0 or not isinstance(tgt, Character):
+                            return
+                        apply_design_hit_effects(attacker, tgt, hgs, False)
+                        tgt.take_damage(
+                            tgt.max_hp * SOUL_MOTH_TRUE_RATIO,
+                            source=attacker,
+                            damage_type="true_soul_moth_powder",
+                            game_state=hgs,
+                        )
+                        if random.random() < SOUL_MOTH_POISON_CHANCE_FORM:
+                            call_target_method(tgt, "add_poison_progress", 1.0)
+                        attacker.heal(dealt * SOUL_MOTH_LIFESTEAL_RATIO)
+
+                    spawn_design_projectile(
+                        attacker,
+                        game_state,
+                        shot_dir,
+                        SOUL_MOTH_FORM_ATTACK_DAMAGE,
+                        "design_spell_soul_moth_form",
+                        color=SOUL_MOTH_FORM_COLOR,
+                        speed=max(attacker.config.get("projectile_speed", 310.0), 340.0),
+                        max_range=attacker.get_current_attack_range(),
+                        visual_shape="crescent",
+                        on_hit=moth_form_hit,
+                    )
+            else:
+                def moth_normal_hit(proj, tgt, dealt, hgs):
+                    if dealt <= 0 or not isinstance(tgt, Character):
+                        return
+                    apply_design_hit_effects(attacker, tgt, hgs, False)
+                    if random.random() < SOUL_MOTH_POISON_CHANCE_NORMAL:
+                        call_target_method(tgt, "add_poison_progress", 1.0)
+
+                spawn_design_projectile(
+                    attacker,
+                    game_state,
+                    direction,
+                    damage,
+                    "design_spell_soul_moth_powder",
+                    color=SOUL_MOTH_COLOR,
+                    speed=max(attacker.config.get("projectile_speed", 310.0), 340.0),
+                    max_range=attacker.get_current_attack_range(),
+                    visual_shape="crescent",
+                    on_hit=moth_normal_hit,
+                )
         else:
             total_shots = repeats + (2 if role_num == 79 and random.random() < 0.2 else 0)
             for shot_index in range(total_shots):
@@ -6963,6 +7047,32 @@ def cast_design_skill(caster, game_state, token=None):
             ),
         )
         caster.add_true_shield(60.0)
+    elif role_num == 110 or token == "soul_moth_silk":
+        if caster.design_soul_moth_form:
+            living = [enemy for enemy in enemies if enemy.alive]
+            if not living:
+                return False
+            chosen_targets = random.sample(living, min(SOUL_MOTH_FLUTTER_TARGETS, len(living)))
+            for chosen in chosen_targets:
+                chosen.take_damage(SOUL_MOTH_FLUTTER_DAMAGE, source=caster, damage_type="design_spell_soul_moth_flutter", game_state=game_state)
+                if isinstance(chosen, Character):
+                    chosen.design_confuse_timer = max(getattr(chosen, "design_confuse_timer", 0.0), SOUL_MOTH_FLUTTER_CONFUSE_DURATION)
+                spawn_attack_impact(game_state, chosen.pos, SOUL_MOTH_FORM_COLOR, radius=12, thickness=2, burst_count=8)
+            return True
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        target.take_damage(SOUL_MOTH_SILK_DAMAGE, source=caster, damage_type="design_spell_soul_moth_silk", game_state=game_state)
+        drag = target.pos - caster.pos
+        if drag.length_squared() > 0:
+            pull_distance = min(SOUL_MOTH_SILK_DRAG, drag.length())
+            target.pos -= drag.normalize() * pull_distance
+            if hasattr(target, "update_rect"):
+                target.update_rect()
+        if hasattr(target, "apply_root"):
+            target.apply_root(SOUL_MOTH_SILK_ROOT_DURATION)
+        spawn_attack_impact(game_state, target.pos, SOUL_MOTH_COLOR, radius=14, thickness=3, burst_count=8)
+        return True
     elif role_num == 95 or token == "windstorm_blade_roll":
         def add_windstorm_volley():
             living_enemies = [enemy for enemy in enemies if enemy.alive]
@@ -7728,6 +7838,11 @@ class Character:
         self.berserker_spin_timer = 0.0
         self.berserker_tick_accumulator = 0.0
         self.berserker_spin_visual_timer = 0.0
+        self.design_soul_moth_soul = 0
+        self.design_soul_moth_form = False
+        self.design_soul_moth_timer = 0.0
+        self.design_confuse_timer = 0.0
+        self._soul_moth_base_physical_resistance = self.physical_resistance
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -8057,6 +8172,8 @@ class Character:
     def get_visual_color(self):
         if self.is_sunfire_blademaster():
             return SUNFIRE_FIRE_COLOR if self.sunfire_fire_timer > 0 else SUNFIRE_WATER_COLOR
+        if self.is_soul_moth() and self.design_soul_moth_form:
+            return SOUL_MOTH_FORM_COLOR
         return self.color
 
     def add_design_xp(self, amount):
@@ -8798,6 +8915,8 @@ class Character:
         return max(0.08, multiplier)
 
     def get_basic_attack_cooldown(self):
+        if self.is_soul_moth() and self.design_soul_moth_form:
+            return SOUL_MOTH_FORM_ACCELERATION * self.get_attack_interval_multiplier()
         return self.base_attack_interval * self.get_attack_interval_multiplier()
 
     def get_weapon_attack_cooldown(self, base_interval):
@@ -9326,6 +9445,38 @@ class Character:
     def clear_weapon(self):
         self.held_weapon = None
 
+    def is_soul_moth(self):
+        return self.job_name == SOUL_MOTH_JOB_NAME
+
+    def enter_soul_moth_form(self, game_state=None):
+        if not self.is_soul_moth():
+            return
+        self.design_soul_moth_form = True
+        self.design_soul_moth_timer = SOUL_MOTH_MOTH_DURATION
+        self.design_soul_moth_soul = 0
+        self.physical_resistance = max(0.0, self._soul_moth_base_physical_resistance - SOUL_MOTH_FORM_PHYS_RESIST_DELTA)
+        if game_state is not None:
+            spawn_attack_impact(game_state, self.pos, SOUL_MOTH_FORM_COLOR, radius=30, thickness=4, lifetime=0.3, burst_count=16)
+            sparks = game_state.setdefault("spell_trail_particles", [])
+            for spark_index in range(8):
+                sparks.append(
+                    SpellTrailParticle(
+                        pygame.Vector2(self.pos),
+                        SOUL_MOTH_FORM_COLOR if spark_index % 2 == 0 else (250, 236, 180),
+                        velocity=random_unit_vector() * random.uniform(60.0, 160.0),
+                        size=3,
+                        lifetime=0.6,
+                    )
+                )
+
+    def exit_soul_moth_form(self):
+        if not self.is_soul_moth():
+            return
+        self.design_soul_moth_form = False
+        self.design_soul_moth_timer = 0.0
+        self.design_soul_moth_soul = 0
+        self.physical_resistance = self._soul_moth_base_physical_resistance
+
     def take_damage(
         self,
         amount,
@@ -9339,6 +9490,10 @@ class Character:
         if not self.alive or amount <= 0:
             return 0.0
         if self.swordmaster_invuln_timer > 0 or self.smasher_leap_timer > 0 or self.valkyrie_dive_timer > 0 or self.design_untargetable_timer > 0:
+            return 0.0
+        if self.is_soul_moth() and self.design_soul_moth_form and not str(damage_type).startswith("true_") and random.random() < SOUL_MOTH_EVADE_CHANCE:
+            if game_state is not None:
+                spawn_damage_text(game_state, self, 0.0, text="蝶影", color=SOUL_MOTH_FORM_COLOR)
             return 0.0
 
         damage = amount
@@ -9607,6 +9762,16 @@ class Character:
                     source_character.refresh_phoenix_max_hp()
                 if source_character is not None and source_character.is_xuanwu():
                     source_character.design_shell_kill_count += 1
+                if source_character is not None and source_character.is_soul_moth():
+                    if source_character.design_soul_moth_form:
+                        source_character.design_soul_moth_timer = SOUL_MOTH_MOTH_DURATION
+                    else:
+                        source_character.design_soul_moth_soul = min(
+                            SOUL_MOTH_MOTH_SOUL_LIMIT,
+                            source_character.design_soul_moth_soul + 1,
+                        )
+                        if source_character.design_soul_moth_soul >= SOUL_MOTH_MOTH_SOUL_LIMIT:
+                            source_character.enter_soul_moth_form(game_state)
                 if source_character is not None and source_character.is_dragon():
                     source_character.design_dragon_awe = min(DRAGON_AWE_MAX, source_character.design_dragon_awe + 1)
                 if source_character is not None and source_character.is_abyssal_watcher() and getattr(self, "design_gaze", 0) > 0:
@@ -9701,6 +9866,8 @@ class Character:
 
     def get_speed_modifier(self):
         modifier = 1.0
+        if self.is_soul_moth() and self.design_soul_moth_form:
+            modifier *= 1.0 + SOUL_MOTH_FORM_MOVE_BONUS
         if self.job_name == "Illusionist" and self.illusion_mirror_stacks > 0:
             modifier *= 1.0 + self.illusion_mirror_stacks * ILLUSION_MIRROR_STACK_SPEED_BONUS
         if self.job_name == "Behemoth" and self.behemoth_stone_stacks > 0:
@@ -10590,6 +10757,12 @@ class Character:
         self.design_recently_hit += dt
         self.design_shadow_idle += dt
         self.design_recent_damage_taken = 0.0
+        if self.design_confuse_timer > 0:
+            self.design_confuse_timer = max(0.0, self.design_confuse_timer - dt)
+        if self.is_soul_moth() and self.design_soul_moth_form:
+            self.design_soul_moth_timer = max(0.0, self.design_soul_moth_timer - dt)
+            if self.design_soul_moth_timer <= 0:
+                self.exit_soul_moth_form()
         if self.job_name == "DesignRole69_ironclad" and self.design_recently_hit >= 5.0:
             self.heal(self.max_hp * IRONCLAD_IDLE_REGEN_RATIO * dt)
         if self.is_twin_mirror():
@@ -11777,6 +11950,15 @@ class Character:
         if self.is_twin_mirror():
             ring_color = TWIN_MIRROR_WHITE_COLOR if self.twin_mirror_form == "white" else TWIN_MIRROR_BLACK_COLOR
             pygame.draw.circle(surface, ring_color, center, round(self.radius + 8), 1)
+        if self.is_soul_moth():
+            if self.design_soul_moth_form:
+                pygame.draw.circle(surface, SOUL_MOTH_FORM_COLOR, center, round(self.radius + 7), 2)
+                pygame.draw.circle(surface, (250, 236, 180), center, round(self.radius + 4), 1)
+            else:
+                for soul_index in range(self.design_soul_moth_soul):
+                    dot_x = center[0] + (soul_index - 1) * 10
+                    pygame.draw.circle(surface, SOUL_MOTH_COLOR, (dot_x, center[1] - self.radius - 9), 3)
+                    pygame.draw.circle(surface, (232, 202, 120), (dot_x, center[1] - self.radius - 9), 3, 1)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:

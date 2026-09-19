@@ -67,6 +67,7 @@ VISUAL_SHAPE_MAP = {
     "矮胖圆柱": "wide",
     "扩音器": "triangle",
     "宝箱形": "wide",
+    "蝶翼棱形": "butterfly",
     "斜十字": "cross_x",
     "波浪形": "ring",
 }
@@ -189,6 +190,7 @@ ROLE_CONFIG_OVERRIDES = {
     107: {"skill_token": "mind_steal", "basic_damage_kind": "physical", "mp_mode": "distance_scaled", "mp_rate": 0.125},
     108: {"skill_token": "rift_slash", "basic_damage_kind": "spell", "mp_mode": "distance_scaled", "mp_rate": 0.115},
     109: {"skill_token": "soul_nine_slash", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 9.0, "attack_interval": 1.4},
+    110: {"skill_token": "soul_moth_silk", "basic_damage_kind": "spell", "mp_mode": "damage_dealt_scaled", "mp_rate": 10.0 / 12.0, "radius_scale": 1.04},
 }
 
 
