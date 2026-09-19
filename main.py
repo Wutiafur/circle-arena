@@ -7727,6 +7727,7 @@ class Character:
         self.mage_arcane_field_tick_accumulator = 0.0
         self.berserker_spin_timer = 0.0
         self.berserker_tick_accumulator = 0.0
+        self.berserker_spin_visual_timer = 0.0
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -10134,6 +10135,9 @@ class Character:
         elif skill_id == "berserker_spin":
             self.berserker_spin_timer = BERSERKER_SPIN_DURATION
             self.berserker_tick_accumulator = 0.0
+            self.berserker_spin_visual_timer = 0.0
+            # D: 起手一次性圈闪（快速展开到范围边界）
+            spawn_attack_impact(game_state, self.pos, (255, 90, 90), radius=BERSERKER_SPIN_RADIUS, thickness=3, lifetime=0.22, burst_count=14)
         elif skill_id == "sniper_beam":
             target = select_farthest_enemy(self, game_state["characters"])
             if target is not None:
@@ -10903,6 +10907,7 @@ class Character:
 
         if self.berserker_spin_timer > 0:
             self.berserker_spin_timer = max(0.0, self.berserker_spin_timer - dt)
+            self.berserker_spin_visual_timer += dt
             self.berserker_tick_accumulator += dt
             while self.berserker_tick_accumulator >= BERSERKER_SPIN_INTERVAL:
                 self.berserker_tick_accumulator -= BERSERKER_SPIN_INTERVAL
@@ -10917,7 +10922,11 @@ class Character:
                 )
                 if hits > 0:
                     self.heal(BERSERKER_SPIN_HEAL * hits)
-                spawn_attack_impact(game_state, self.pos, (255, 90, 90), radius=72, thickness=4, lifetime=0.18, burst_count=10)
+                # A: 圈内受击敌人各自爆点（视觉：全圈同时挨打，而非向外扩散）
+                for target in get_targetables(game_state):
+                    if target.alive and target.owner_id != self.owner_id:
+                        if (target.pos - self.pos).length() <= BERSERKER_SPIN_RADIUS + getattr(target, "radius", 0):
+                            spawn_attack_impact(game_state, target.pos, (255, 110, 90), radius=9, thickness=2, burst_count=5)
 
         if self.sniper_charge_timer > 0:
             self.sniper_charge_timer = max(0.0, self.sniper_charge_timer - dt)
@@ -11771,7 +11780,19 @@ class Character:
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
-            pygame.draw.circle(surface, (255, 90, 90), center, round(self.radius + 8), 2)
+            # B: 固定范围警戒圈（圈即伤害范围，不扩散）
+            pygame.draw.circle(surface, (255, 90, 90), center, round(BERSERKER_SPIN_RADIUS), 2)
+            # C: 旋转斩痕（随自转扫过的扇形红弧 + 边线）
+            spin_angle = self.berserker_spin_visual_timer * 5.0
+            half_sweep = 0.9
+            sweep_start = spin_angle - half_sweep
+            sweep_end = spin_angle + half_sweep
+            circle_rect = pygame.Rect(0, 0, int(BERSERKER_SPIN_RADIUS * 2), int(BERSERKER_SPIN_RADIUS * 2))
+            circle_rect.center = center
+            pygame.draw.arc(surface, (255, 126, 90), circle_rect, sweep_start, sweep_end, 4)
+            for sweep_a in (sweep_start, sweep_end):
+                edge = pygame.Vector2(center) + pygame.Vector2(math.cos(sweep_a), math.sin(sweep_a)) * BERSERKER_SPIN_RADIUS
+                pygame.draw.line(surface, (255, 126, 90), center, (round(edge.x), round(edge.y)), 2)
         if self.sniper_charge_timer > 0:
             aim = self.pos + self.sniper_beam_direction * 28
             pygame.draw.line(surface, (150, 255, 170), center, (round(aim.x), round(aim.y)), 2)
