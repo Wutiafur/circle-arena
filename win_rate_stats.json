@@ -5,7 +5,7 @@
       "wins": 0
     },
     "Mage": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Assassin": {
@@ -41,11 +41,11 @@
       "wins": 0
     },
     "Illusionist": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Behemoth": {
-      "matches": 3,
+      "matches": 4,
       "wins": 2
     },
     "Toxicologist": {
@@ -113,7 +113,7 @@
       "wins": 0
     },
     "Chaos Demon": {
-      "matches": 6,
+      "matches": 7,
       "wins": 0
     },
     "Bounty Hunter": {
@@ -121,7 +121,7 @@
       "wins": 0
     },
     "Geomancer": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Bard": {
@@ -141,7 +141,7 @@
       "wins": 0
     },
     "Tinkerer": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "Valkyrie": {
@@ -169,7 +169,7 @@
       "wins": 0
     },
     "DesignRole44_beastmaster": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole45_plague_doc": {
@@ -189,7 +189,7 @@
       "wins": 0
     },
     "DesignRole49_cultist": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole50_elementalist": {
@@ -213,15 +213,15 @@
       "wins": 0
     },
     "DesignRole55_role": {
-      "matches": 6,
-      "wins": 1
+      "matches": 7,
+      "wins": 2
     },
     "DesignRole56_oracle": {
       "matches": 3,
       "wins": 0
     },
     "DesignRole57_gambler": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole58_voidwalker": {
@@ -229,7 +229,7 @@
       "wins": 0
     },
     "DesignRole59_ranger": {
-      "matches": 6,
+      "matches": 7,
       "wins": 0
     },
     "DesignRole60_golem": {
@@ -237,7 +237,7 @@
       "wins": 4
     },
     "DesignRole61_ronin": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole62_lich": {
@@ -265,7 +265,7 @@
       "wins": 0
     },
     "DesignRole68_arachnid": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole69_ironclad": {
@@ -277,7 +277,7 @@
       "wins": 0
     },
     "DesignRole71_spellblade": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole72_soul_eater": {
@@ -293,7 +293,7 @@
       "wins": 0
     },
     "DesignRole75_astral_being": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole76_qi_cultivator": {
@@ -333,7 +333,7 @@
       "wins": 0
     },
     "DesignRole85_sword_spirit": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole86_soulbinder": {
@@ -401,7 +401,7 @@
       "wins": 0
     },
     "DesignRole101_tiger": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole102_azure_dragon": {
@@ -421,7 +421,7 @@
       "wins": 0
     },
     "DesignRole106_abyssal_watcher": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole107_mind_thief": {

@@ -7548,6 +7548,9 @@ class Decoy:
         pygame.draw.polygon(surface, BORDER_COLOR, points, 1)
 
 
+ROTATABLE_SHAPES = {"triangle", "triangle_down", "half_circle", "crescent", "arrow", "chevron"}
+
+
 class Character:
     def __init__(self, job_name, character_id, pos, owner_id=None, is_main_character=True, clone_config=None):
         config = JOB_DEFS[job_name]
@@ -7588,6 +7591,7 @@ class Character:
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
         self.recent_move_dir = pygame.Vector2(self.wander_dir)
+        self.facing_angle = 0.0
         self.strafe_sign = random.choice((-1, 1))
         self.strafe_timer = random.uniform(*STRAFE_SWITCH_INTERVAL)
         self.melee_gap_dash_timer = 0.0
@@ -11059,6 +11063,7 @@ class Character:
             self.vel *= 0.0
             self.recent_move_dir = pygame.Vector2(0, 0)
             self.update_rect()
+            self.update_facing(game_state)
             return
 
         self.update_soul_blade(dt, game_state)
@@ -11271,6 +11276,21 @@ class Character:
             self.choose_wander_direction()
 
         self.update_rect()
+        self.update_facing(game_state)
+
+    def update_facing(self, game_state):
+        near = None
+        near_d2 = float("inf")
+        for other in game_state.get("characters", []):
+            if other.alive and other.owner_id != self.owner_id:
+                d2 = (other.pos - self.pos).length_squared()
+                if d2 < near_d2:
+                    near_d2 = d2
+                    near = other
+        if near is not None:
+            self.facing_angle = math.degrees(math.atan2(near.pos.y - self.pos.y, near.pos.x - self.pos.x))
+        elif self.recent_move_dir.length_squared() > 0.001:
+            self.facing_angle = math.degrees(math.atan2(self.recent_move_dir.y, self.recent_move_dir.x))
 
     def resolve_overlap(self, other):
         if not self.alive or not other.alive:
@@ -11315,7 +11335,26 @@ class Character:
             pygame.draw.circle(surface, BORDER_COLOR, right_center, max(7, self.radius - 3), 1)
             return
         draw_color = (255, 72, 72) if self.hit_flash_timer > 0 else self.get_visual_color()
-        draw_shape_icon(surface, self.shape, draw_color, (round(center.x), round(center.y)), self.radius - 2)
+        if self.shape in ROTATABLE_SHAPES:
+            size = int(self.radius * 2 + 12)
+            icon_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+            draw_shape_icon(icon_surface, self.shape, draw_color, (size // 2, size // 2), self.radius - 2)
+            rotate_deg = -90.0 - self.facing_angle
+            rotated_surface = pygame.transform.rotozoom(icon_surface, rotate_deg, 1.0)
+            surface.blit(rotated_surface, rotated_surface.get_rect(center=(round(center.x), round(center.y))))
+        else:
+            draw_shape_icon(surface, self.shape, draw_color, (round(center.x), round(center.y)), self.radius - 2)
+            rad = math.radians(self.facing_angle)
+            dir_vec = pygame.Vector2(math.cos(rad), math.sin(rad))
+            perpendicular = pygame.Vector2(-dir_vec.y, dir_vec.x) * 3
+            tip = center + dir_vec * (self.radius + 6)
+            base_1 = center + dir_vec * (self.radius + 1) + perpendicular
+            base_2 = center + dir_vec * (self.radius + 1) - perpendicular
+            pygame.draw.polygon(
+                surface,
+                (235, 240, 248),
+                [(round(tip.x), round(tip.y)), (round(base_1.x), round(base_1.y)), (round(base_2.x), round(base_2.y))],
+            )
 
     def draw_spawn_fx(self, surface):
         if self.spawn_fx_timer <= 0:
