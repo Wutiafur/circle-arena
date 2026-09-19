@@ -150,7 +150,7 @@ ROLE_CONFIG_OVERRIDES = {
     60: {"skill_token": "stone_skin", "attack_stun_duration": 0.35, "radius_scale": 1.24},
     61: {"skill_token": "swallow_return", "mp_mode": "attack_count", "mp_rate": 25.0},
     62: {"skill_token": "frost_burst", "basic_damage_kind": "spell", "attack_status": ("cold", 0.1), "mp_mode": "passive", "mp_rate": 8.0},
-    63: {"skill_token": "guillotine", "mp_mode": "damage_dealt_scaled", "mp_rate": 1.5, "radius_scale": 1.1},
+    63: {"skill_token": "guillotine", "mp_mode": "damage_dealt_scaled", "mp_rate": 15.0 / 8.0, "radius_scale": 1.1},
     64: {"skill_token": "deep_sleep", "basic_damage_kind": "spell", "attack_status": ("sleep", 0.01), "mp_mode": "passive", "mp_rate": 10.0},
     65: {"skill_token": "drone", "mp_mode": "passive", "mp_rate": 20.0},
     66: {"skill_token": "blood_contract", "mp_mode": "damage_taken_scaled", "mp_rate": 1.5},

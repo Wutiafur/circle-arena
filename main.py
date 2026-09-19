@@ -6581,6 +6581,8 @@ def fire_design_basic_attack(attacker, target, game_state):
         return
     repeats = max(1, int(attacker.config.get("attack_repeat", 1)))
     damage = attacker.get_current_basic_damage() * attacker.get_target_attack_bonus(target)
+    if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.5:
+        damage *= 1.2
     if role_num == 57:
         damage = random.choice(attacker.config.get("attack_random_values", [damage]))
     if role_num == 53 and attacker.design_sentinel_lock:
@@ -6808,8 +6810,9 @@ def fire_design_basic_attack(attacker, target, game_state):
             dealt = target.take_damage(damage, source=attacker, damage_type=attacker.get_design_damage_type("basic_melee"), game_state=game_state)
             if dealt > 0:
                 apply_design_hit_effects(attacker, target, game_state, True)
-                if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.05:
+                if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.15:
                     target.take_damage(target.hp + 1.0, source=attacker, damage_type="true_design_execute", game_state=game_state)
+                    attacker.design_execute_buff_timer = 5.0
         stun_duration = attacker.get_current_melee_stun_duration()
         if stun_duration > 0:
             call_target_method(target, "apply_stun", stun_duration)
@@ -7522,7 +7525,10 @@ def cast_design_skill(caster, game_state, token=None):
     elif token == "guillotine":
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is not None:
-            target.take_damage(60.0, source=caster, damage_type="true_design_guillotine", game_state=game_state)
+            guillotine_damage = 60.0
+            if target.hp > 0 and target.hp <= target.max_hp * 0.5:
+                guillotine_damage = 120.0
+            target.take_damage(guillotine_damage, source=caster, damage_type="true_design_guillotine", game_state=game_state)
             call_target_method(target, "apply_bleed", 2)
     elif token == "deep_sleep":
         target = select_highest_hp_enemy(caster, game_state["characters"])
@@ -7843,6 +7849,7 @@ class Character:
         self.design_soul_moth_timer = 0.0
         self.design_confuse_timer = 0.0
         self._soul_moth_base_physical_resistance = self.physical_resistance
+        self.design_execute_buff_timer = 0.0
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -8517,6 +8524,8 @@ class Character:
         damage *= 1.0 + self.design_collect_fervor * 0.2
         if self.killstreak_buff_level > 0:
             damage *= 1.0 + KILLSTREAK_GAIN_DAMAGE.get(self.killstreak_buff_level, 0.0)
+        if self.design_meta.get("role_num") == 63 and self.design_execute_buff_timer > 0:
+            damage *= 1.25
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -10759,6 +10768,8 @@ class Character:
         self.design_recent_damage_taken = 0.0
         if self.design_confuse_timer > 0:
             self.design_confuse_timer = max(0.0, self.design_confuse_timer - dt)
+        if self.design_execute_buff_timer > 0:
+            self.design_execute_buff_timer = max(0.0, self.design_execute_buff_timer - dt)
         if self.is_soul_moth() and self.design_soul_moth_form:
             self.design_soul_moth_timer = max(0.0, self.design_soul_moth_timer - dt)
             if self.design_soul_moth_timer <= 0:
@@ -12263,6 +12274,14 @@ def draw_world(surface, game_state, label_font):
         particle.draw(surface)
     for character in game_state["characters"]:
         character.draw(surface, label_font)
+    executioner_present = any(
+        character.alive and character.design_meta.get("role_num") == 63 for character in game_state["characters"]
+    )
+    if executioner_present:
+        for character in game_state["characters"]:
+            if character.alive and character.hp > 0 and character.hp <= character.max_hp * 0.15:
+                mark = label_font.render("!", True, (255, 72, 72))
+                surface.blit(mark, mark.get_rect(midbottom=(round(character.pos.x), round(character.pos.y - character.radius - 15))))
     for particle in game_state["death_particles"]:
         particle.draw(surface)
     if GAME_SETTINGS.get("show_damage_numbers", True):
