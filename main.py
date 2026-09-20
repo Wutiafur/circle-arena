@@ -760,6 +760,8 @@ RAIL_TRACK_DURATION = 1.2
 RAIL_DAMAGE = 55.0
 RAIL_STUN_DURATION = 0.8
 RAIL_KNOCKBACK = 80.0
+RAIL_GRIND_DAMAGE = 6.0
+RAIL_GRIND_INTERVAL = 0.5
 RAIL_TAKEN_MP_RATIO = 0.05
 RAIL_BODY_COLOR = (128, 138, 148)
 RAIL_LIGHT_COLOR = (255, 214, 80)
@@ -5288,8 +5290,6 @@ class DesignEffect:
             for target in get_targetables(game_state):
                 if not target.alive or target.owner_id == self.owner_id:
                     continue
-                if id(target) in self.hit_ids:
-                    continue
                 offset = target.pos - self.pos
                 along = offset.dot(self.direction)
                 if abs(along) > half_len + getattr(target, "radius", 0.0):
@@ -5297,12 +5297,24 @@ class DesignEffect:
                 perp = offset - self.direction * along
                 if perp.length() > half_w + getattr(target, "radius", 0.0):
                     continue
-                self.hit_ids.add(id(target))
-                target.take_damage(RAIL_DAMAGE, source=self.owner, damage_type="design_physical_rail_train", game_state=game_state)
-                call_target_method(target, "apply_stun", RAIL_STUN_DURATION)
-                knock_side = pygame.Vector2(-self.direction.y, self.direction.x) * random.choice((-1.0, 1.0))
-                call_target_method(target, "apply_knockback", knock_side, RAIL_KNOCKBACK)
-                spawn_attack_impact(game_state, target.pos, RAIL_LIGHT_COLOR, radius=12, thickness=2, burst_count=8)
+                target_id = id(target)
+                if target_id not in self.hit_ids:
+                    # 首撞（V1）：重撞伤害 + 垂直撞飞 + 眩晕
+                    self.hit_ids.add(target_id)
+                    target.take_damage(RAIL_DAMAGE, source=self.owner, damage_type="design_physical_rail_train", game_state=game_state)
+                    call_target_method(target, "apply_stun", RAIL_STUN_DURATION)
+                    knock_side = pygame.Vector2(-self.direction.y, self.direction.x) * random.choice((-1.0, 1.0))
+                    call_target_method(target, "apply_knockback", knock_side, RAIL_KNOCKBACK)
+                    spawn_attack_impact(game_state, target.pos, RAIL_LIGHT_COLOR, radius=12, thickness=2, burst_count=8)
+                else:
+                    # 碾压持续（V2）：被车体压住每 0.5s 受 6 伤（每秒 12）
+                    grind_t = self.hit_counts.get(target_id, 0.0) + dt
+                    self.hit_counts[target_id] = grind_t
+                    while grind_t >= RAIL_GRIND_INTERVAL:
+                        grind_t -= RAIL_GRIND_INTERVAL
+                        target.take_damage(RAIL_GRIND_DAMAGE, source=self.owner, damage_type="design_physical_rail_grind", game_state=game_state)
+                        spawn_attack_impact(game_state, target.pos, (232, 200, 120), radius=8, thickness=2, burst_count=4)
+                    self.hit_counts[target_id] = grind_t
             if traveled >= float(self.data.get("total_travel", 0.0)):
                 spawn_attack_impact(game_state, self.pos, RAIL_LIGHT_COLOR, radius=16, thickness=3, burst_count=12)
                 game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.1)
