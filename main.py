@@ -750,6 +750,20 @@ SOUL_MOTH_FLUTTER_DAMAGE = 25.0
 SOUL_MOTH_FLUTTER_CONFUSE_DURATION = 1.0
 SOUL_MOTH_COLOR = (122, 100, 214)
 SOUL_MOTH_FORM_COLOR = (232, 202, 120)
+# 111 铁轨狂徒
+RAIL_JOB_NAME = "DesignRole111_railhog"
+RAIL_LENGTH = 420.0
+RAIL_WIDTH = 44.0
+RAIL_SPEED = 720.0
+RAIL_ENTER_DELAY = 0.5
+RAIL_TRACK_DURATION = 1.2
+RAIL_DAMAGE = 55.0
+RAIL_STUN_DURATION = 0.8
+RAIL_KNOCKBACK = 80.0
+RAIL_TAKEN_MP_RATIO = 0.05
+RAIL_BODY_COLOR = (128, 138, 148)
+RAIL_LIGHT_COLOR = (255, 214, 80)
+RAIL_TRACK_COLOR = (168, 180, 192)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -5260,6 +5274,40 @@ class DesignEffect:
                         if target.alive and target.owner_id != self.owner_id:
                             target.take_damage(global_damage, source=self.owner, damage_type="design_physical_windstorm_global", game_state=game_state)
                 self.alive = False
+        elif self.effect_type == "rail_train":
+            delay = float(self.data.get("delay", 0.0))
+            if delay > 0:
+                self.data["delay"] = max(0.0, delay - dt)
+                return
+            speed = float(self.data.get("speed", RAIL_SPEED))
+            traveled = float(self.data.get("traveled", 0.0)) + speed * dt
+            self.data["traveled"] = traveled
+            self.pos += self.direction * speed * dt
+            half_len = float(self.data.get("length", RAIL_LENGTH)) * 0.5
+            half_w = float(self.data.get("width", RAIL_WIDTH)) * 0.5
+            for target in get_targetables(game_state):
+                if not target.alive or target.owner_id == self.owner_id:
+                    continue
+                if id(target) in self.hit_ids:
+                    continue
+                offset = target.pos - self.pos
+                along = offset.dot(self.direction)
+                if abs(along) > half_len + getattr(target, "radius", 0.0):
+                    continue
+                perp = offset - self.direction * along
+                if perp.length() > half_w + getattr(target, "radius", 0.0):
+                    continue
+                self.hit_ids.add(id(target))
+                target.take_damage(RAIL_DAMAGE, source=self.owner, damage_type="design_physical_rail_train", game_state=game_state)
+                call_target_method(target, "apply_stun", RAIL_STUN_DURATION)
+                knock_side = pygame.Vector2(-self.direction.y, self.direction.x) * random.choice((-1.0, 1.0))
+                call_target_method(target, "apply_knockback", knock_side, RAIL_KNOCKBACK)
+                spawn_attack_impact(game_state, target.pos, RAIL_LIGHT_COLOR, radius=12, thickness=2, burst_count=8)
+            if traveled >= float(self.data.get("total_travel", 0.0)):
+                spawn_attack_impact(game_state, self.pos, RAIL_LIGHT_COLOR, radius=16, thickness=3, burst_count=12)
+                game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.1)
+                game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 4.0)
+                self.alive = False
         elif self.effect_type == "soul_chain":
             target_id = self.data.get("target_id")
             target = next((candidate for candidate in get_targetables(game_state) if id(candidate) == target_id), None)
@@ -5820,6 +5868,43 @@ class DesignEffect:
                 orbit_r = max(2.0, self.radius * (2.6 - 2.2 * progress))
                 dot = pygame.Vector2(center) + pygame.Vector2(math.cos(orbit_angle), math.sin(orbit_angle)) * orbit_r
                 pygame.draw.circle(overlay, (255, 255, 220, max(40, alpha)), (round(dot.x), round(dot.y)), 2)
+        elif self.effect_type == "rail_track":
+            half_len = float(self.data.get("length", RAIL_LENGTH)) * 0.5
+            width = float(self.data.get("width", RAIL_WIDTH))
+            perp = pygame.Vector2(-self.direction.y, self.direction.x)
+            for rail_side in (-1.0, 1.0):
+                offset_vec = perp * (width * 0.5 - 5.0) * rail_side
+                for segment_index in range(12):
+                    t = -1.0 + 2.0 * segment_index / 11.0
+                    p = self.pos + self.direction * (t * half_len) + offset_vec
+                    pb = p - self.direction * (half_len / 14.0)
+                    alpha_rail = int(200 * clamp(t, 0.0, 1.0)) + 20
+                    pygame.draw.line(
+                        overlay,
+                        (*RAIL_TRACK_COLOR, max(40, alpha_rail)),
+                        (round(pb.x), round(pb.y)),
+                        (round(p.x), round(p.y)),
+                        3,
+                    )
+        elif self.effect_type == "rail_train":
+            length = float(self.data.get("length", RAIL_LENGTH))
+            width = float(self.data.get("width", RAIL_WIDTH))
+            angle = -math.degrees(math.atan2(self.direction.y, self.direction.x))
+            car_surface = pygame.Surface((int(length) + 60, int(width) + 24), pygame.SRCALPHA)
+            cy = car_surface.get_height() // 2
+            body_rect = pygame.Rect(28, cy - int(width / 2), int(length), int(width))
+            pygame.draw.rect(car_surface, (*RAIL_BODY_COLOR, 240), body_rect, border_radius=8)
+            pygame.draw.rect(car_surface, (92, 100, 108, 240), body_rect, 2, border_radius=8)
+            nose_rect = pygame.Rect(int(length) + 12, cy - int(width / 2) + 6, 30, int(width) - 12)
+            pygame.draw.rect(car_surface, (*RAIL_LIGHT_COLOR, 255), nose_rect, border_radius=6)
+            pygame.draw.circle(car_surface, (255, 255, 235, 255), (int(length) + 24, cy - 8), 5)
+            for box_index in range(4):
+                window_x = 48 + box_index * 96
+                pygame.draw.rect(car_surface, (58, 64, 72, 235), (window_x, cy - int(width * 0.28), 46, int(width * 0.5)), border_radius=5)
+            for wheel_x in (70, 170, 270, int(length) - 70):
+                pygame.draw.circle(car_surface, (36, 40, 46, 255), (wheel_x, cy + int(width / 2) - 2), 6)
+            rotated_car = pygame.transform.rotozoom(car_surface, angle, 1.0)
+            overlay.blit(rotated_car, rotated_car.get_rect(center=(round(self.pos.x), round(self.pos.y))))
         elif self.effect_type == "valkyrie_landing":
             progress = clamp(1.0 - self.lifetime / max(0.1, VALKYRIE_LANDING_LIFETIME), 0.0, 1.0)
             alpha = int(230 * (1.0 - progress))
@@ -7082,6 +7167,46 @@ def cast_design_skill(caster, game_state, token=None):
             ),
         )
         caster.add_true_shield(60.0)
+    elif role_num == 111 or token == "rail_train":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        direction = target.pos - caster.pos
+        if direction.length_squared() == 0:
+            direction = random_unit_vector()
+        direction = direction.normalize()
+        # 铁轨警示线（先铺轨）
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "rail_track",
+                caster,
+                pygame.Vector2(caster.pos),
+                direction=direction,
+                length=RAIL_LENGTH,
+                width=RAIL_WIDTH,
+                lifetime=RAIL_TRACK_DURATION,
+            ),
+        )
+        # 列车：从屏幕外驶入，沿直线横穿
+        diagonal_half = (ARENA_RECT.width + ARENA_RECT.height) * 0.5
+        start_pos = caster.pos - direction * (diagonal_half + RAIL_LENGTH * 0.5)
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "rail_train",
+                caster,
+                start_pos,
+                direction=direction,
+                length=RAIL_LENGTH,
+                width=RAIL_WIDTH,
+                speed=RAIL_SPEED,
+                delay=RAIL_ENTER_DELAY,
+                total_travel=diagonal_half * 2.0 + RAIL_LENGTH,
+                lifetime=8.0,
+            ),
+        )
+        return True
     elif role_num == 110 or token == "soul_moth_silk":
         if caster.design_soul_moth_form:
             living = [enemy for enemy in enemies if enemy.alive]
@@ -9741,6 +9866,8 @@ class Character:
             self.gain_mp(self.config["mp_rate"], "damage_taken")
         elif self.config["mp_mode"] == "damage_taken_scaled":
             self.gain_mp(damage * self.config["mp_rate"], "damage_taken_scaled")
+        if self.job_name == "DesignRole111_railhog" and damage > 0:
+            self.gain_mp(damage * RAIL_TAKEN_MP_RATIO, "rail_taken")
         if self.config["mp_mode"] == "damage_event_any":
             self.gain_mp(self.config["mp_rate"], "damage_event_any")
 
