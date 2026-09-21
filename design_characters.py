@@ -192,6 +192,9 @@ ROLE_CONFIG_OVERRIDES = {
     109: {"skill_token": "soul_nine_slash", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 9.0, "attack_interval": 1.4},
     110: {"skill_token": "soul_moth_silk", "basic_damage_kind": "spell", "mp_mode": "damage_dealt_scaled", "mp_rate": 10.0 / 12.0, "radius_scale": 1.04},
     111: {"skill_token": "rail_train", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 15.0, "radius_scale": 1.12},
+    112: {"skill_token": "banner_throw", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0, "radius_scale": 1.06},
+    113: {"skill_token": "potion_burst", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 7.0},
+    114: {"skill_token": "squad_focus", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 10.0},
 }
 
 

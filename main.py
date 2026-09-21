@@ -766,6 +766,39 @@ RAIL_TAKEN_MP_RATIO = 0.05
 RAIL_BODY_COLOR = (128, 138, 148)
 RAIL_LIGHT_COLOR = (255, 214, 80)
 RAIL_TRACK_COLOR = (168, 180, 192)
+# 112 战旗守护者
+BANNER_JOB_NAME = "DesignRole112_bannerbearer"
+BANNER_RADIUS = 140.0
+BANNER_HP = 3.0
+BANNER_RESPAWN_DELAY = 20.0
+BANNER_HASTE_BONUS = 0.15
+BANNER_REDUCTION = 0.10
+BANNER_LIFESTEAL = 0.08
+BANNER_LIFESTEAL_DURATION = 5.0
+BANNER_COLOR = (120, 170, 90)
+# 113 灵魂药剂师
+ALCHEMIST_JOB_NAME = "DesignRole113_soul_alchemist"
+POTION_INTERVAL = 8.0
+POTION_HASTE_BONUS = 0.25
+POTION_HASTE_DURATION = 3.0
+POTION_HEAL_RATIO = 0.06
+POTION_SHIELD_RATIO = 0.10
+WILD_BREW_HASTE = 0.30
+WILD_BREW_DURATION = 5.0
+WILD_BREW_PENALTY = 0.10
+ALCHEMIST_COLOR = (120, 214, 150)
+# 114 指挥官
+COMMANDER_JOB_NAME = "DesignRole114_squad_commander"
+SQUAD_MARK_DURATION = 3.0
+SQUAD_MARK_BONUS_PER_FRIEND = 0.05
+SQUAD_MARK_BONUS_CAP = 0.20
+SQUAD_FOCUS_DURATION = 5.0
+SQUAD_FOCUS_BONUS = 0.30
+SQUAD_FOCUS_SLOW = 0.20
+SQUAD_PROTECT_DURATION = 3.0
+SQUAD_PROTECT_REDUCTION = 0.40
+SQUAD_PROTECT_SPEED = 0.25
+COMMANDER_COLOR = (96, 130, 220)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3920,6 +3953,9 @@ def get_targetables(game_state):
     for totem in game_state.get("totems", []):
         if totem.alive:
             targetables.append(totem)
+    for banner in game_state.get("banners", []):
+        if banner.alive:
+            targetables.append(banner)
     return targetables
 
 
@@ -5203,6 +5239,62 @@ class Totem:
             fill.width = max(1, int(hp_rect.width * (self.hp / self.max_hp)))
             pygame.draw.rect(surface, self.color, fill, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
+
+
+class Banner:
+    def __init__(self, owner, pos):
+        self.owner = owner
+        self.owner_id = owner.owner_id
+        self.pos = pygame.Vector2(pos)
+        self.radius = 12
+        self.hp = BANNER_HP
+        self.max_hp = BANNER_HP
+        self.lifesteal_timer = 0.0
+        self.alive = True
+        self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
+        self.rect.center = (round(self.pos.x), round(self.pos.y))
+
+    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False):
+        if not self.alive or amount <= 0:
+            return 0.0
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            self.alive = False
+            if self.owner is not None and getattr(self.owner, "alive", False) and hasattr(self.owner, "design_banner_respawn_timer"):
+                self.owner.design_banner_respawn_timer = BANNER_RESPAWN_DELAY
+        return amount
+
+    def update(self, dt, game_state):
+        if not self.alive:
+            return
+        if self.lifesteal_timer > 0:
+            self.lifesteal_timer = max(0.0, self.lifesteal_timer - dt)
+        for ally in game_state.get("characters", []):
+            if not ally.alive or ally.owner_id != self.owner_id:
+                continue
+            if (ally.pos - self.pos).length() <= BANNER_RADIUS + getattr(ally, "radius", 0):
+                ally.design_banner_zone_timer = 0.6
+                if self.lifesteal_timer > 0:
+                    ally.design_banner_lifesteal_timer = 0.6
+
+    def draw(self, surface, label_font=None):
+        center = (round(self.pos.x), round(self.pos.y))
+        pygame.draw.circle(surface, BANNER_COLOR, center, 14, 2)
+        pygame.draw.line(surface, (200, 208, 216), (center[0], center[1] - 8), (center[0], center[1] - 34), 3)
+        flag_points = [
+            (center[0], center[1] - 34),
+            (center[0] + 18, center[1] - 28),
+            (center[0], center[1] - 22),
+        ]
+        pygame.draw.polygon(surface, (60, 92, 64), flag_points)
+        pygame.draw.polygon(surface, (*BANNER_COLOR, 220), flag_points)
+        hp_rect = pygame.Rect(center[0] - 12, center[1] - 46, 24, 4)
+        pygame.draw.rect(surface, HEALTH_BG, hp_rect, border_radius=2)
+        if self.hp > 0:
+            fill = hp_rect.copy()
+            fill.width = max(1, int(hp_rect.width * (self.hp / self.max_hp)))
+            pygame.draw.rect(surface, (120, 220, 120), fill, border_radius=2)
 
 
 class DesignEffect:
@@ -6641,6 +6733,9 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
         target.design_susanoo_prowl = min(SUSANOO_PROWL_MAX, target.design_susanoo_prowl + SUSANOO_PROWL_APPLY_ON_HIT)
     if role_num == 59:
         target.design_ranger_mark = min(RANGER_MARK_MAX, target.design_ranger_mark + 2)
+    if role_num == 114:
+        target.design_squad_mark_timer = SQUAD_MARK_DURATION
+        target.design_squad_mark_owner_id = attacker.owner_id
     if role_num == 77:
         attacker.design_shadow_stacks = min(SHADOW_VALUE_MAX, attacker.design_shadow_stacks + 1)
         call_target_method(target, "apply_slow", 0.2, 1.0)
@@ -7179,6 +7274,52 @@ def cast_design_skill(caster, game_state, token=None):
             ),
         )
         caster.add_true_shield(60.0)
+    elif role_num == 112 or role_num == 113 or role_num == 114:
+        if role_num == 112:
+            if token == "banner_valor":
+                for flag in game_state.get("banners", []):
+                    if flag.owner_id == caster.owner_id and flag.alive:
+                        flag.lifesteal_timer = BANNER_LIFESTEAL_DURATION
+                return True
+            target = select_nearest_enemy(caster, game_state["characters"])
+            my_banner = next((flag for flag in game_state.get("banners", []) if flag.owner_id == caster.owner_id and flag.alive), None)
+            if my_banner is None:
+                my_banner = Banner(caster, pygame.Vector2(caster.pos))
+                game_state["banners"].append(my_banner)
+            if target is None:
+                return False
+            my_banner.pos = pygame.Vector2(target.pos) + random_unit_vector() * 20.0
+            my_banner.rect.center = (round(my_banner.pos.x), round(my_banner.pos.y))
+            spawn_attack_impact(game_state, my_banner.pos, BANNER_COLOR, radius=14, thickness=3, burst_count=8)
+            return True
+        if role_num == 113:
+            if token == "potion_wild":
+                for ally in game_state.get("characters", []):
+                    if ally.alive and ally.owner_id == caster.owner_id:
+                        ally.design_wild_brew_timer = max(getattr(ally, "design_wild_brew_timer", 0.0), WILD_BREW_DURATION)
+                return True
+            allies = [c for c in game_state.get("characters", []) if c.alive and c.owner_id == caster.owner_id and c is not caster]
+            if not allies:
+                return False
+            for ally in allies:
+                caster.throw_potion(ally, game_state)
+            return True
+        if token == "squad_protect":
+            allies = [c for c in game_state.get("characters", []) if c.alive and c.owner_id == caster.owner_id and c is not caster]
+            if not allies:
+                return False
+            ally = min(allies, key=lambda c: (c.pos - caster.pos).length_squared())
+            ally.design_protect_timer = max(getattr(ally, "design_protect_timer", 0.0), SQUAD_PROTECT_DURATION)
+            spawn_attack_impact(game_state, ally.pos, COMMANDER_COLOR, radius=12, thickness=2, burst_count=8)
+            return True
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        target.design_squad_primary_timer = SQUAD_FOCUS_DURATION
+        target.design_squad_primary_owner_id = caster.owner_id
+        target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
+        spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
     elif role_num == 111 or token == "rail_train":
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is None:
@@ -8045,6 +8186,17 @@ class Character:
         self.design_confuse_timer = 0.0
         self._soul_moth_base_physical_resistance = self.physical_resistance
         self.design_execute_buff_timer = 0.0
+        self.design_banner_zone_timer = 0.0
+        self.design_banner_lifesteal_timer = 0.0
+        self.design_banner_respawn_timer = 0.0
+        self.design_potion_haste_timer = 0.0
+        self.design_potion_cooldown_timer = POTION_INTERVAL
+        self.design_wild_brew_timer = 0.0
+        self.design_protect_timer = 0.0
+        self.design_squad_mark_timer = 0.0
+        self.design_squad_mark_owner_id = None
+        self.design_squad_primary_timer = 0.0
+        self.design_squad_primary_owner_id = None
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -9119,7 +9271,13 @@ class Character:
                 multiplier *= 1.3
         if self.is_dragon() and self.design_dragon_form == "thunder":
             multiplier *= 1.0 - DRAGON_THUNDER_ATTACK_SPEED_BONUS
-        return max(0.08, multiplier)
+        if self.design_banner_zone_timer > 0:
+            multiplier /= 1.0 + BANNER_HASTE_BONUS
+        if self.design_potion_haste_timer > 0:
+            multiplier /= 1.0 + POTION_HASTE_BONUS
+        if self.design_wild_brew_timer > 0:
+            multiplier /= 1.0 + WILD_BREW_HASTE
+        return max(0.05, multiplier)
 
     def get_basic_attack_cooldown(self):
         if self.is_soul_moth() and self.design_soul_moth_form:
@@ -9655,6 +9813,28 @@ class Character:
     def clear_weapon(self):
         self.held_weapon = None
 
+    def throw_potion(self, target, game_state=None):
+        if not self.alive or target is None or not getattr(target, "alive", False):
+            return
+        roll = random.random()
+        if roll < 0.34:
+            target.design_potion_haste_timer = max(getattr(target, "design_potion_haste_timer", 0.0), POTION_HASTE_DURATION)
+        elif roll < 0.67:
+            if hasattr(target, "heal"):
+                target.heal(target.max_hp * POTION_HEAL_RATIO)
+        else:
+            if hasattr(target, "add_true_shield"):
+                target.add_true_shield(target.max_hp * POTION_SHIELD_RATIO)
+        if game_state is not None:
+            spawn_attack_impact(game_state, target.pos, ALCHEMIST_COLOR, radius=10, thickness=2, burst_count=6)
+
+    def throw_potion_to_nearest_ally(self, game_state):
+        allies = [c for c in game_state.get("characters", []) if c.alive and c.owner_id == self.owner_id and c is not self]
+        if not allies:
+            return
+        nearest = min(allies, key=lambda c: (c.pos - self.pos).length_squared())
+        self.throw_potion(nearest, game_state)
+
     def is_soul_moth(self):
         return self.job_name == SOUL_MOTH_JOB_NAME
 
@@ -9710,6 +9890,27 @@ class Character:
         is_true_damage = str(damage_type).startswith("true_")
         if self.job_name == "DesignRole91_phantom_lancer" and self.vel.length() > 30.0 and not is_true_damage:
             damage *= 0.88
+        # 队友增益互联（112-114）：旗区减伤/掩护减伤/狂野加重/协同与集火增伤/旗区吸血
+        src_char = None
+        if isinstance(source, Character):
+            src_char = source
+        elif hasattr(source, "owner") and isinstance(source.owner, Character):
+            src_char = source.owner
+        if not is_true_damage:
+            if self.design_banner_zone_timer > 0:
+                damage *= 1.0 - BANNER_REDUCTION
+            if self.design_protect_timer > 0:
+                damage *= 1.0 - SQUAD_PROTECT_REDUCTION
+            if self.design_wild_brew_timer > 0:
+                damage *= 1.0 + WILD_BREW_PENALTY
+        if src_char is not None and src_char.owner_id != self.owner_id:
+            if self.design_squad_mark_timer > 0 and self.design_squad_mark_owner_id == src_char.owner_id:
+                friends = max(1, sum(1 for c in game_state.get("characters", []) if c.alive and c.owner_id == src_char.owner_id))
+                damage *= 1.0 + min(SQUAD_MARK_BONUS_CAP, friends * SQUAD_MARK_BONUS_PER_FRIEND)
+            if self.design_squad_primary_timer > 0 and self.design_squad_primary_owner_id == src_char.owner_id:
+                damage *= 1.0 + SQUAD_FOCUS_BONUS
+            if getattr(src_char, "design_banner_lifesteal_timer", 0.0) > 0 and damage > 0:
+                src_char.heal(damage * BANNER_LIFESTEAL)
         source_character = None
         if isinstance(source, Character):
             source_character = source
@@ -10080,6 +10281,8 @@ class Character:
 
     def get_speed_modifier(self):
         modifier = 1.0
+        if self.design_protect_timer > 0:
+            modifier *= 1.0 + SQUAD_PROTECT_SPEED
         if self.is_soul_moth() and self.design_soul_moth_form:
             modifier *= 1.0 + SOUL_MOTH_FORM_MOVE_BONUS
         if self.job_name == "Illusionist" and self.illusion_mirror_stacks > 0:
@@ -10979,6 +11182,35 @@ class Character:
             self.design_confuse_timer = max(0.0, self.design_confuse_timer - dt)
         if self.design_execute_buff_timer > 0:
             self.design_execute_buff_timer = max(0.0, self.design_execute_buff_timer - dt)
+        if self.design_banner_zone_timer > 0:
+            self.design_banner_zone_timer = max(0.0, self.design_banner_zone_timer - dt)
+        if self.design_banner_lifesteal_timer > 0:
+            self.design_banner_lifesteal_timer = max(0.0, self.design_banner_lifesteal_timer - dt)
+        if self.design_banner_respawn_timer > 0:
+            self.design_banner_respawn_timer = max(0.0, self.design_banner_respawn_timer - dt)
+        if self.design_potion_haste_timer > 0:
+            self.design_potion_haste_timer = max(0.0, self.design_potion_haste_timer - dt)
+        if self.design_wild_brew_timer > 0:
+            self.design_wild_brew_timer = max(0.0, self.design_wild_brew_timer - dt)
+        if self.design_protect_timer > 0:
+            self.design_protect_timer = max(0.0, self.design_protect_timer - dt)
+        if self.design_squad_mark_timer > 0:
+            self.design_squad_mark_timer = max(0.0, self.design_squad_mark_timer - dt)
+            if self.design_squad_mark_timer <= 0:
+                self.design_squad_mark_owner_id = None
+        if self.design_squad_primary_timer > 0:
+            self.design_squad_primary_timer = max(0.0, self.design_squad_primary_timer - dt)
+            if self.design_squad_primary_timer <= 0:
+                self.design_squad_primary_owner_id = None
+        if self.job_name == BANNER_JOB_NAME:
+            my_banners = [ban for ban in game_state.get("banners", []) if ban.owner_id == self.owner_id and ban.alive]
+            if not my_banners and self.design_banner_respawn_timer <= 0:
+                game_state.setdefault("banners", []).append(Banner(self, pygame.Vector2(self.pos)))
+        elif self.job_name == ALCHEMIST_JOB_NAME:
+            self.design_potion_cooldown_timer -= dt
+            while self.design_potion_cooldown_timer <= 0:
+                self.design_potion_cooldown_timer += POTION_INTERVAL
+                self.throw_potion_to_nearest_ally(game_state)
         if self.is_soul_moth() and self.design_soul_moth_form:
             self.design_soul_moth_timer = max(0.0, self.design_soul_moth_timer - dt)
             if self.design_soul_moth_timer <= 0:
@@ -12334,6 +12566,7 @@ def create_game_state(player_count, timed_weapon_orb_drops_enabled=True):
         "frost_comets": [],
         "shield_walls": [],
         "totems": [],
+        "banners": [],
         "design_summons": [],
         "design_effects": [],
         "design_death_positions": [],
@@ -12425,6 +12658,8 @@ def update_world_lists(game_state, dt):
         shield_wall.update(dt, game_state)
     for totem in game_state["totems"]:
         totem.update(dt, game_state)
+    for banner in game_state.get("banners", []):
+        banner.update(dt, game_state)
     for summon in game_state["design_summons"]:
         summon.update(dt, game_state)
     for effect in game_state["design_effects"]:
@@ -12441,6 +12676,7 @@ def update_world_lists(game_state, dt):
     game_state["frost_comets"] = [comet for comet in game_state["frost_comets"] if comet.alive]
     game_state["shield_walls"] = [shield_wall for shield_wall in game_state["shield_walls"] if shield_wall.alive]
     game_state["totems"] = [totem for totem in game_state["totems"] if totem.alive]
+    game_state["banners"] = [banner for banner in game_state.get("banners", []) if banner.alive]
     game_state["design_effects"] = [effect for effect in game_state["design_effects"] if effect.alive]
     game_state["weapon_orbs"] = [orb for orb in game_state["weapon_orbs"] if orb.alive]
     game_state["damage_texts"] = [damage_text for damage_text in game_state["damage_texts"] if damage_text.alive]
@@ -12467,6 +12703,8 @@ def draw_world(surface, game_state, label_font):
         shield_wall.draw(surface)
     for totem in game_state["totems"]:
         totem.draw(surface)
+    for banner in game_state.get("banners", []):
+        banner.draw(surface)
     for decoy in game_state["decoys"]:
         decoy.draw(surface)
     for summon in game_state["summons"]:
