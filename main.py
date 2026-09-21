@@ -14119,7 +14119,7 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
     selection = {"red": set(), "blue": set()}
     scroll = {"red": 0, "blue": 0}
     list_top, list_h, row_h = 158, 550, 56
-    TEAM_MAX = 3
+    TEAM_MAX = 8
     RED_COLOR = (224, 84, 76)
     BLUE_COLOR = (96, 160, 255)
 
@@ -14179,7 +14179,7 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
             pygame.draw.line(canvas, (22, 28, 36), (gx, 0), (gx, SCREEN_HEIGHT), 1)
         for gy in range(0, SCREEN_HEIGHT, 40):
             pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
-        title = title_font.render("红蓝擂台赛：红队 vs 蓝队（每队 1~3 人）", True, TEXT_COLOR)
+        title = title_font.render("红蓝擂台赛：红队 vs 蓝队（每队 1~8 人）", True, TEXT_COLOR)
         canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 62)))
         hint = subtitle_font.render("点击角色加入/移出队伍 · 滚轮滚动 · Esc 返回", True, (150, 164, 180))
         canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 98)))
@@ -14229,10 +14229,10 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
     gs["timed_weapon_orb_drops_enabled"] = False
     characters = []
     for index, job in enumerate(red_jobs):
-        pos = pygame.Vector2(ARENA_RECT.left + 130 + index * 80, ARENA_RECT.bottom - 120 - index * 80)
+        pos = pygame.Vector2(ARENA_RECT.left + 110 + index * 54, ARENA_RECT.bottom - 110 - index * 54)
         characters.append(Character(job, index + 1, pos, owner_id=1))
     for index, job in enumerate(blue_jobs):
-        pos = pygame.Vector2(ARENA_RECT.right - 130 - index * 80, ARENA_RECT.top + 120 + index * 80)
+        pos = pygame.Vector2(ARENA_RECT.right - 110 - index * 54, ARENA_RECT.top + 110 + index * 54)
         characters.append(Character(job, 100 + index + 1, pos, owner_id=2))
     gs["characters"] = characters
     gs["battle_participants"] = list(characters)
@@ -14254,8 +14254,8 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
     while True:
         dt = clock.tick(FPS) / 1000.0
         mouse_pos = pygame.mouse.get_pos()
-        rematch_rect = pygame.Rect(180, 612, 200, 44)
-        back_rect = pygame.Rect(420, 612, 200, 44)
+        rematch_rect = pygame.Rect(180, 684, 200, 44)
+        back_rect = pygame.Rect(420, 684, 200, 44)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return None
@@ -14310,24 +14310,26 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
         scene_surface.blit(blue_label, blue_label.get_rect(center=blue_badge.center))
 
         if result_text:
-            end_panel = pygame.Rect(110, 236, 580, 340)
+            end_panel = pygame.Rect(110, 150, 580, 520)
             draw_panel(scene_surface, end_panel, MENU_PANEL, accent_color=(255, 214, 120), radius=16, shadow_offset=(3, 4))
             result_surface = battle_font.render(result_text, True, result_color)
-            scene_surface.blit(result_surface, result_surface.get_rect(center=(end_panel.centerx, end_panel.top + 28)))
-            y = end_panel.top + 62
+            scene_surface.blit(result_surface, result_surface.get_rect(center=(end_panel.centerx, end_panel.top + 26)))
+            y = end_panel.top + 56
             for owner, team_color, team_label in ((1, RED_COLOR, "红队"), (2, BLUE_COLOR, "蓝队")):
                 team_chars = [c for c in characters if c.owner_id == owner]
                 head = subtitle_font.render(f"— {team_label} —", True, team_color)
                 scene_surface.blit(head, (end_panel.left + 40, y))
-                y += 26
+                y += 22
                 for char in team_chars:
+                    if y >= end_panel.bottom - 8:
+                        break
                     stat_line = body_font.render(
                         f"{get_character_display_name(char)}：{int(char.damageDealt)} 伤 / {int(char.damageTaken)} 承" + (" 存活" if char.alive else " 战败"),
                         True,
                         (196, 208, 224),
                     )
                     scene_surface.blit(stat_line, (end_panel.left + 56, y))
-                    y += 24
+                    y += 20
             rematch_hover = rematch_rect.collidepoint(mouse_pos)
             back_hover = back_rect.collidepoint(mouse_pos)
             draw_panel(scene_surface, rematch_rect, MENU_BUTTON_HOVER if rematch_hover else MENU_ACCENT, radius=10, shadow_offset=(2, 2))
