@@ -799,6 +799,17 @@ SQUAD_PROTECT_DURATION = 3.0
 SQUAD_PROTECT_REDUCTION = 0.40
 SQUAD_PROTECT_SPEED = 0.25
 COMMANDER_COLOR = (96, 130, 220)
+# 115 虚空放逐者
+BANISH_JOB_NAME = "DesignRole115_void_banisher"
+BANISH_MARKS_REQUIRED = 4
+BANISH_SKILL_DAMAGE = 30.0
+BANISH_TICK_INTERVAL = 5.0
+BANISH_TICK_RATIO = 0.10
+BANISH_ROLL_INTERVAL = 3.0
+BANISH_ROLL_MIN = 2
+BANISH_ROLL_MAX = 6
+BANISH_POINTS_THRESHOLD = 20
+BANISH_COLOR = (150, 100, 220)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3939,7 +3950,7 @@ def get_living_main_characters(game_state):
 def get_targetables(game_state):
     targetables = []
     for character in game_state["characters"]:
-        if character.alive and getattr(character, "design_untargetable_timer", 0.0) <= 0:
+        if character.alive and getattr(character, "design_untargetable_timer", 0.0) <= 0 and not getattr(character, "design_banished", False):
             targetables.append(character)
     for decoy in game_state["decoys"]:
         if decoy.alive:
@@ -3963,7 +3974,7 @@ def select_nearest_enemy(character, characters):
     nearest = None
     nearest_distance_sq = float("inf")
     for other in characters:
-        if not other.alive or other.owner_id == character.owner_id:
+        if not other.alive or other.owner_id == character.owner_id or getattr(other, "design_banished", False):
             continue
         distance_sq = (other.pos - character.pos).length_squared()
         if distance_sq < nearest_distance_sq:
@@ -3973,21 +3984,21 @@ def select_nearest_enemy(character, characters):
 
 
 def select_lowest_hp_enemy(character, characters):
-    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id]
+    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id and not getattr(other, "design_banished", False)]
     if not enemies:
         return None
     return min(enemies, key=lambda other: (other.hp, (other.pos - character.pos).length_squared()))
 
 
 def select_farthest_enemy(character, characters):
-    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id]
+    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id and not getattr(other, "design_banished", False)]
     if not enemies:
         return None
     return max(enemies, key=lambda other: (other.pos - character.pos).length_squared())
 
 
 def select_highest_hp_enemy(character, characters):
-    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id]
+    enemies = [other for other in characters if other.alive and other.owner_id != character.owner_id and not getattr(other, "design_banished", False)]
     if not enemies:
         return None
     return max(enemies, key=lambda other: (other.hp, -(other.pos - character.pos).length_squared()))
@@ -7190,6 +7201,8 @@ def fire_design_basic_attack(attacker, target, game_state):
 
 
 def cast_design_skill(caster, game_state, token=None):
+    if getattr(caster, "design_banished", False):
+        return False
     token = token or caster.design_meta.get("skill_token")
     role_num = caster.design_meta.get("role_num")
     enemies = [target for target in get_targetables(game_state) if target.alive and target.owner_id != caster.owner_id]
@@ -7319,6 +7332,22 @@ def cast_design_skill(caster, game_state, token=None):
         target.design_squad_primary_owner_id = caster.owner_id
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
+    elif role_num == 115 or token == "void_banish":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        dealt = target.take_damage(BANISH_SKILL_DAMAGE, source=caster, damage_type="design_spell_void_banish", game_state=game_state)
+        if dealt > 0:
+            target.design_banish_mark += 1
+            spawn_attack_impact(game_state, target.pos, BANISH_COLOR, radius=14, thickness=3, burst_count=10)
+            if target.design_banish_mark >= BANISH_MARKS_REQUIRED:
+                target.design_banish_mark = 0
+                target.design_banished = True
+                target.design_banish_points = 0
+                target.design_banish_tick_timer = BANISH_TICK_INTERVAL
+                target.design_banish_roll_timer = BANISH_ROLL_INTERVAL
+                spawn_damage_text(game_state, target, 0.0, text="放逐！", color=BANISH_COLOR)
         return True
     elif role_num == 111 or token == "rail_train":
         target = select_nearest_enemy(caster, game_state["characters"])
@@ -8197,6 +8226,11 @@ class Character:
         self.design_squad_mark_owner_id = None
         self.design_squad_primary_timer = 0.0
         self.design_squad_primary_owner_id = None
+        self.design_banish_mark = 0
+        self.design_banished = False
+        self.design_banish_points = 0
+        self.design_banish_tick_timer = 0.0
+        self.design_banish_roll_timer = 0.0
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -9773,6 +9807,8 @@ class Character:
     def gain_mp(self, amount, reason):
         if not self.alive or amount <= 0:
             return
+        if self.design_banished:
+            return
         self.mp = clamp(self.mp + amount, 0.0, MAX_MP)
 
     def apply_slow(self, amount, duration):
@@ -10626,6 +10662,8 @@ class Character:
     def cast_skill(self, game_state):
         if not self.alive or self.clone_mode is not None:
             return
+        if self.design_banished:
+            return
 
         skill_id = self.config["skill_id"]
         if self.is_design_role():
@@ -11202,6 +11240,23 @@ class Character:
             self.design_squad_primary_timer = max(0.0, self.design_squad_primary_timer - dt)
             if self.design_squad_primary_timer <= 0:
                 self.design_squad_primary_owner_id = None
+        if self.design_banished:
+            self.design_banish_tick_timer -= dt
+            while self.design_banish_tick_timer <= 0:
+                self.design_banish_tick_timer += BANISH_TICK_INTERVAL
+                self.take_damage(self.max_hp * BANISH_TICK_RATIO, source=None, damage_type="true_design_banish", game_state=game_state)
+            self.design_banish_roll_timer -= dt
+            while self.design_banish_roll_timer <= 0:
+                self.design_banish_roll_timer += BANISH_ROLL_INTERVAL
+                roll = random.randint(BANISH_ROLL_MIN, BANISH_ROLL_MAX)
+                self.design_banish_points += roll
+                if game_state is not None:
+                    spawn_damage_text(game_state, self, 0.0, text=f"判定{roll}/累计{self.design_banish_points}", color=BANISH_COLOR)
+                if self.design_banish_points >= BANISH_POINTS_THRESHOLD:
+                    self.design_banished = False
+                    self.design_banish_points = 0
+                    if game_state is not None:
+                        spawn_damage_text(game_state, self, 0.0, text="放逐解除", color=(190, 215, 255))
         if self.job_name == BANNER_JOB_NAME:
             my_banners = [ban for ban in game_state.get("banners", []) if ban.owner_id == self.owner_id and ban.alive]
             if not my_banners and self.design_banner_respawn_timer <= 0:
@@ -12415,6 +12470,9 @@ class Character:
                     dot_x = center[0] + (soul_index - 1) * 10
                     pygame.draw.circle(surface, SOUL_MOTH_COLOR, (dot_x, center[1] - self.radius - 9), 3)
                     pygame.draw.circle(surface, (232, 202, 120), (dot_x, center[1] - self.radius - 9), 3, 1)
+        if self.design_banished:
+            pygame.draw.circle(surface, BANISH_COLOR, center, round(self.radius + 9), 2)
+            pygame.draw.circle(surface, (86, 58, 128), center, round(self.radius + 4), 1)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
@@ -13415,6 +13473,8 @@ def truncate_text(text, font, max_width):
 
 def describe_design_state(character):
     parts = []
+    if getattr(character, "design_banished", False):
+        parts.append(f"放逐{character.design_banish_points}/{BANISH_POINTS_THRESHOLD}")
     meta = getattr(character, "design_meta", None) or {}
     role_num = meta.get("role_num")
     if character.is_phoenix():

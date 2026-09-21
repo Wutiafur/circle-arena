@@ -195,6 +195,7 @@ ROLE_CONFIG_OVERRIDES = {
     112: {"skill_token": "banner_throw", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0, "radius_scale": 1.06},
     113: {"skill_token": "potion_burst", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 7.0},
     114: {"skill_token": "squad_focus", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 10.0},
+    115: {"skill_token": "void_banish", "basic_damage_kind": "spell", "mp_mode": "damage_dealt_scaled", "mp_rate": 1.0},
 }
 
 
