@@ -8231,6 +8231,8 @@ class Character:
         self.design_banish_points = 0
         self.design_banish_tick_timer = 0.0
         self.design_banish_roll_timer = 0.0
+        self.design_banish_pulse = 0.0
+        self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
         self.sniper_beam_direction = pygame.Vector2(1, 0)
         self.sniper_stationary_timer = 0.0
@@ -11250,6 +11252,7 @@ class Character:
                 self.design_banish_roll_timer += BANISH_ROLL_INTERVAL
                 roll = random.randint(BANISH_ROLL_MIN, BANISH_ROLL_MAX)
                 self.design_banish_points += roll
+                self.design_banish_pulse = 0.35
                 if game_state is not None:
                     spawn_damage_text(game_state, self, 0.0, text=f"判定{roll}/累计{self.design_banish_points}", color=BANISH_COLOR)
                 if self.design_banish_points >= BANISH_POINTS_THRESHOLD:
@@ -11257,6 +11260,22 @@ class Character:
                     self.design_banish_points = 0
                     if game_state is not None:
                         spawn_damage_text(game_state, self, 0.0, text="放逐解除", color=(190, 215, 255))
+            if self.design_banish_pulse > 0:
+                self.design_banish_pulse = max(0.0, self.design_banish_pulse - dt)
+            self.design_banish_dust_timer -= dt
+            if self.design_banish_dust_timer <= 0:
+                self.design_banish_dust_timer = 0.4
+                if game_state is not None:
+                    dust_velocity = pygame.Vector2(random.uniform(-6.0, 6.0), random.uniform(-26.0, -14.0))
+                    game_state.setdefault("spell_trail_particles", []).append(
+                        SpellTrailParticle(
+                            pygame.Vector2(self.pos.x, self.pos.y + self.radius + 2),
+                            BANISH_COLOR,
+                            velocity=dust_velocity,
+                            size=2,
+                            lifetime=0.5,
+                        )
+                    )
         if self.job_name == BANNER_JOB_NAME:
             my_banners = [ban for ban in game_state.get("banners", []) if ban.owner_id == self.owner_id and ban.alive]
             if not my_banners and self.design_banner_respawn_timer <= 0:
@@ -12471,8 +12490,27 @@ class Character:
                     pygame.draw.circle(surface, SOUL_MOTH_COLOR, (dot_x, center[1] - self.radius - 9), 3)
                     pygame.draw.circle(surface, (232, 202, 120), (dot_x, center[1] - self.radius - 9), 3, 1)
         if self.design_banished:
-            pygame.draw.circle(surface, BANISH_COLOR, center, round(self.radius + 9), 2)
-            pygame.draw.circle(surface, (86, 58, 128), center, round(self.radius + 4), 1)
+            # 脚下虚空裂口（椭圆底座）
+            base_center = (center[0], round(self.pos.y + self.radius - 2))
+            base_rect = pygame.Rect(0, 0, round(max(14, self.radius * 2.6)), round(max(8, self.radius * 0.85)))
+            base_rect.center = base_center
+            pygame.draw.ellipse(surface, BANISH_COLOR, base_rect, 2)
+            pygame.draw.ellipse(surface, (86, 58, 128), base_rect.inflate(-6, -3), 1)
+            # roll 爆闪环（脉动扩散）
+            pulse_ratio = clamp(self.design_banish_pulse / 0.35, 0.0, 1.0)
+            if pulse_ratio > 0:
+                pulse_r = round(self.radius + 7 + pulse_ratio * 13)
+                pygame.draw.circle(surface, BANISH_COLOR, center, pulse_r, max(1, round(4 - pulse_ratio * 3)))
+                pygame.draw.circle(surface, (206, 170, 255), center, max(1, pulse_r - 4), 1)
+            # 头顶放逐进度条（points/20）
+            progress_ratio = clamp(self.design_banish_points / BANISH_POINTS_THRESHOLD, 0.0, 1.0)
+            bar_rect = pygame.Rect(center[0] - 15, center[1] - self.radius - 38, 30, 4)
+            pygame.draw.rect(surface, (30, 30, 44), bar_rect, border_radius=2)
+            pygame.draw.rect(surface, (26, 20, 40), bar_rect, 1, border_radius=2)
+            if progress_ratio > 0:
+                fill = bar_rect.copy()
+                fill.width = max(1, int(bar_rect.width * progress_ratio))
+                pygame.draw.rect(surface, BANISH_COLOR, fill, border_radius=2)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
