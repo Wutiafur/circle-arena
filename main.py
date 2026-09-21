@@ -14114,6 +14114,122 @@ def bet_loop(screen, clock, title_font, subtitle_font, body_font, button_font, g
         clock.tick(FPS)
 
 
+def duel_placement_valid(unit, new_pos, units, mid_x):
+    if unit["team"] == 1 and new_pos.x > mid_x + 2.0:
+        return False
+    if unit["team"] == 2 and new_pos.x < mid_x - 2.0:
+        return False
+    for other in units:
+        if other is unit:
+            continue
+        if (other["pos"] - new_pos).length() < 26.0:
+            return False
+    return True
+
+
+def setup_loop(screen, clock, title_font, subtitle_font, body_font, button_font, red_jobs, blue_jobs):
+    mid_x = (ARENA_RECT.left + ARENA_RECT.right) / 2.0
+    units = []
+
+    def apply_default_positions():
+        units.clear()
+        for index, job in enumerate(red_jobs):
+            pos = pygame.Vector2(ARENA_RECT.left + 110 + index * 54, ARENA_RECT.bottom - 110 - index * 54)
+            units.append({"job": job, "team": 1, "pos": pos, "radius": 12})
+        for index, job in enumerate(blue_jobs):
+            pos = pygame.Vector2(ARENA_RECT.right - 110 - index * 54, ARENA_RECT.top + 110 + index * 54)
+            units.append({"job": job, "team": 2, "pos": pos, "radius": 12})
+
+    apply_default_positions()
+    dragging = None
+
+    while True:
+        canvas_rect, device_pixel_ratio = get_window_transform(screen)
+        mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
+        start_rect = pygame.Rect(180, 726, 180, 44)
+        reset_rect = pygame.Rect(380, 726, 160, 44)
+        back_rect = pygame.Rect(560, 734, 150, 40)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((max(1, event.w), max(1, event.h)), WINDOW_FLAGS)
+                canvas_rect, device_pixel_ratio = get_window_transform(screen)
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is None:
+                    continue
+                if start_rect.collidepoint(mapped_pos):
+                    return {"red": [u["pos"] for u in units if u["team"] == 1], "blue": [u["pos"] for u in units if u["team"] == 2]}
+                if reset_rect.collidepoint(mapped_pos):
+                    apply_default_positions()
+                    continue
+                if back_rect.collidepoint(mapped_pos):
+                    return "back"
+                if mapped_pos.x < ARENA_RECT.right and mapped_pos.y < ARENA_RECT.bottom:
+                    for unit in units:
+                        if (unit["pos"] - pygame.Vector2(mapped_pos)).length() < 22:
+                            dragging = unit
+                            break
+            if event.type == pygame.MOUSEMOTION and dragging is not None:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is not None:
+                    dragging["pos"] = pygame.Vector2(mapped_pos)
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1 and dragging is not None:
+                if not duel_placement_valid(dragging, dragging["pos"], units, mid_x):
+                    for team_jobs, team_id in ((red_jobs, 1), (blue_jobs, 2)):
+                        for index, job in enumerate(team_jobs):
+                            unit = next((u for u in units if u["job"] == job and u["team"] == team_id), None)
+                            if unit is dragging:
+                                if team_id == 1:
+                                    unit["pos"] = pygame.Vector2(ARENA_RECT.left + 110 + index * 54, ARENA_RECT.bottom - 110 - index * 54)
+                                else:
+                                    unit["pos"] = pygame.Vector2(ARENA_RECT.right - 110 - index * 54, ARENA_RECT.top + 110 + index * 54)
+                dragging = None
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "back"
+
+        canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        canvas.fill(BACKGROUND_COLOR)
+        draw_grid(canvas)
+        # 半场领地底色
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(overlay, (224, 84, 76, 10), pygame.Rect(ARENA_RECT.left, ARENA_RECT.top, round(mid_x - ARENA_RECT.left), ARENA_RECT.height))
+        pygame.draw.rect(overlay, (96, 160, 255, 10), pygame.Rect(round(mid_x), ARENA_RECT.top, ARENA_RECT.right - round(mid_x), ARENA_RECT.height))
+        canvas.blit(overlay, (0, 0))
+        pygame.draw.rect(canvas, BORDER_COLOR, ARENA_RECT, 3)
+        pygame.draw.line(canvas, (255, 214, 120), (round(mid_x), ARENA_RECT.top), (round(mid_x), ARENA_RECT.bottom), 2)
+        title = title_font.render("战前布阵：拖拽角色到自己半场任意位置", True, TEXT_COLOR)
+        canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 40)))
+        hint = subtitle_font.render("红方只能放左半场 · 蓝方只能放右半场 · 不可重叠 · Esc 返回选人", True, (150, 164, 180))
+        canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 72)))
+        red_hint = subtitle_font.render("红方领地（左）", True, (255, 170, 160))
+        canvas.blit(red_hint, (ARENA_RECT.left + 14, ARENA_RECT.top + 10))
+        blue_hint = subtitle_font.render("蓝方领地（右）", True, (150, 200, 255))
+        canvas.blit(blue_hint, blue_hint.get_rect(topright=(ARENA_RECT.right - 14, ARENA_RECT.top + 10)))
+
+        for unit in units:
+            data = get_pokedex_data(unit["job"])
+            draw_shape_icon(canvas, data.get("shape", "circle"), data.get("color", (180, 180, 180)), (round(unit["pos"].x), round(unit["pos"].y)), unit["radius"])
+            ring = (224, 84, 76) if unit["team"] == 1 else (96, 160, 255)
+            pygame.draw.circle(canvas, ring, (round(unit["pos"].x), round(unit["pos"].y)), unit["radius"] + 4, 2)
+            name_s = subtitle_font.render(truncate_text(data.get("display_name", unit["job"]), subtitle_font, 70), True, TEXT_COLOR)
+            canvas.blit(name_s, name_s.get_rect(center=(round(unit["pos"].x), round(unit["pos"].y - unit["radius"] - 18))))
+
+        for rect, label in ((start_rect, "开始对战"), (reset_rect, "恢复默认"), (back_rect, "返回选人")):
+            hover = mouse_pos is not None and rect.collidepoint(mouse_pos)
+            color = MENU_ACCENT if label == "开始对战" and hover else MENU_BUTTON_HOVER if hover else (MENU_BUTTON if label != "开始对战" else MENU_ACCENT)
+            draw_panel(canvas, rect, color, radius=10, shadow_offset=(2, 2))
+            label_s = subtitle_font.render(label, True, TEXT_COLOR)
+            canvas.blit(label_s, label_s.get_rect(center=rect.center))
+
+        present_canvas(screen, canvas, canvas_rect)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
 def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
     ordered_names = get_pokedex_ordered_names()
     selection = {"red": set(), "blue": set()}
@@ -14151,10 +14267,19 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
                 if back_rect.collidepoint(mapped_pos):
                     return "menu"
                 if start_rect.collidepoint(mapped_pos) and selection["red"] and selection["blue"]:
+                    prep = setup_loop(
+                        screen, clock, title_font, subtitle_font, body_font, button_font,
+                        sorted(selection["red"]),
+                        sorted(selection["blue"]),
+                    )
+                    if prep == "back":
+                        continue
                     return _run_duel(
                         screen, clock, title_font, subtitle_font, body_font, button_font,
                         sorted(selection["red"]),
                         sorted(selection["blue"]),
+                        prep["red"],
+                        prep["blue"],
                     )
                 for side in ("red", "blue"):
                     for name, rect in row_rects[side].items():
@@ -14224,15 +14349,15 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
         clock.tick(FPS)
 
 
-def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, red_jobs, blue_jobs):
+def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, red_jobs, blue_jobs, red_positions=None, blue_positions=None):
     gs = create_game_state(2, timed_weapon_orb_drops_enabled=False)
     gs["timed_weapon_orb_drops_enabled"] = False
     characters = []
     for index, job in enumerate(red_jobs):
-        pos = pygame.Vector2(ARENA_RECT.left + 110 + index * 54, ARENA_RECT.bottom - 110 - index * 54)
+        pos = red_positions[index] if red_positions else pygame.Vector2(ARENA_RECT.left + 110 + index * 54, ARENA_RECT.bottom - 110 - index * 54)
         characters.append(Character(job, index + 1, pos, owner_id=1))
     for index, job in enumerate(blue_jobs):
-        pos = pygame.Vector2(ARENA_RECT.right - 110 - index * 54, ARENA_RECT.top + 110 + index * 54)
+        pos = blue_positions[index] if blue_positions else pygame.Vector2(ARENA_RECT.right - 110 - index * 54, ARENA_RECT.top + 110 + index * 54)
         characters.append(Character(job, 100 + index + 1, pos, owner_id=2))
     gs["characters"] = characters
     gs["battle_participants"] = list(characters)
