@@ -810,6 +810,17 @@ BANISH_ROLL_MIN = 2
 BANISH_ROLL_MAX = 6
 BANISH_POINTS_THRESHOLD = 20
 BANISH_COLOR = (150, 100, 220)
+# 116 雀影
+SPARROW_JOB_NAME = "DesignRole116_sparrowhost"
+SPARROW_BLOOD_RATIO = 0.20
+SPARROW_BLOOD_ABSORB_RATIO = 5.0
+SPARROW_SPELL_REDUCTION = 0.50
+SPARROW_FURY_DURATION = 4.0
+SPARROW_FURY_DAMAGE_BONUS = 0.20
+SPARROW_SWAP_DAMAGE = 40.0
+SPARROW_REATTACH_DELAY = 1.0
+SPARROW_COLOR = (236, 144, 96)
+SPARROW_BLOOD_COLOR = (150, 70, 200)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3950,7 +3961,7 @@ def get_living_main_characters(game_state):
 def get_targetables(game_state):
     targetables = []
     for character in game_state["characters"]:
-        if character.alive and getattr(character, "design_untargetable_timer", 0.0) <= 0 and not getattr(character, "design_banished", False):
+        if character.alive and getattr(character, "design_untargetable_timer", 0.0) <= 0 and not getattr(character, "design_banished", False) and getattr(character, "design_sparrow_host_id", None) is None:
             targetables.append(character)
     for decoy in game_state["decoys"]:
         if decoy.alive:
@@ -6783,6 +6794,8 @@ def fire_design_basic_attack(attacker, target, game_state):
     role_num = attacker.design_meta.get("role_num")
     if getattr(attacker, "design_confuse_timer", 0.0) > 0:
         return
+    if getattr(attacker, "design_sparrow_host_id", None) is not None:
+        return  # 雀影附着中不普攻
     if target is None or not target.alive:
         return
     if role_num == 91 and getattr(attacker, "phantom_lancer_spear_charges", 0) > 0:
@@ -7332,6 +7345,25 @@ def cast_design_skill(caster, game_state, token=None):
         target.design_squad_primary_owner_id = caster.owner_id
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
+    elif role_num == 116 or token == "sparrow_swap":
+        current_host = caster.get_sparrow_host(game_state)
+        for victim in enemies:
+            if victim.alive and (victim.pos - caster.pos).length() <= 90.0 + getattr(victim, "radius", 0):
+                victim.take_damage(SPARROW_SWAP_DAMAGE, source=caster, damage_type="design_spell_sparrow_swap", game_state=game_state)
+                knock = victim.pos - caster.pos
+                if knock.length_squared() > 0:
+                    call_target_method(victim, "apply_knockback", knock.normalize(), 50.0)
+        if current_host is not None:
+            current_host.design_sparrow_fury_timer = max(getattr(current_host, "design_sparrow_fury_timer", 0.0), SPARROW_FURY_DURATION)
+            caster.design_sparrow_host_id = None
+        allies = [
+            c for c in game_state.get("characters", [])
+            if c.alive and c.owner_id == caster.owner_id and c is not caster and c is not current_host and getattr(c, "design_corrupted_blood", 0.0) <= 0
+        ]
+        if allies:
+            new_host = min(allies, key=lambda c: (c.pos - caster.pos).length_squared())
+            caster.attach_sparrow_host(new_host, game_state)
         return True
     elif role_num == 115 or token == "void_banish":
         target = select_nearest_enemy(caster, game_state["characters"])
@@ -8231,6 +8263,10 @@ class Character:
         self.design_banish_points = 0
         self.design_banish_tick_timer = 0.0
         self.design_banish_roll_timer = 0.0
+        self.design_sparrow_host_id = None
+        self.design_sparrow_reattach_timer = 0.0
+        self.design_corrupted_blood = 0.0
+        self.design_sparrow_fury_timer = 0.0
         self.design_banish_pulse = 0.0
         self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
@@ -8912,6 +8948,8 @@ class Character:
             damage *= 1.0 + KILLSTREAK_GAIN_DAMAGE.get(self.killstreak_buff_level, 0.0)
         if self.design_meta.get("role_num") == 63 and self.design_execute_buff_timer > 0:
             damage *= 1.25
+        if self.design_sparrow_fury_timer > 0:
+            damage *= 1.0 + SPARROW_FURY_DAMAGE_BONUS
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -9851,6 +9889,54 @@ class Character:
     def clear_weapon(self):
         self.held_weapon = None
 
+    def is_sparrow(self):
+        return self.job_name == SPARROW_JOB_NAME
+
+    def attach_sparrow_host(self, host, game_state=None):
+        if not self.is_sparrow() or self.design_sparrow_host_id is not None:
+            return
+        if host is None or not getattr(host, "alive", False):
+            return
+        if getattr(host, "design_corrupted_blood", 0.0) > 0:
+            return
+        cost = min(host.max_hp * SPARROW_BLOOD_RATIO, max(0.0, host.hp - 1.0))
+        if cost <= 0:
+            return
+        host.hp -= cost
+        host.design_corrupted_blood = cost
+        self.design_sparrow_host_id = host.id
+        if game_state is not None:
+            spawn_attack_impact(game_state, host.pos, SPARROW_BLOOD_COLOR, radius=16, thickness=2, burst_count=10)
+
+    def get_sparrow_host(self, game_state):
+        if self.design_sparrow_host_id is None or game_state is None:
+            return None
+        return next((c for c in game_state.get("characters", []) if c.id == self.design_sparrow_host_id and c.alive), None)
+
+    def update_sparrow_host(self, dt, game_state):
+        if not self.is_sparrow():
+            return
+        host = self.get_sparrow_host(game_state)
+        if host is None:
+            if self.design_sparrow_host_id is not None:
+                self.design_sparrow_host_id = None
+                self.design_sparrow_reattach_timer = SPARROW_REATTACH_DELAY
+            if self.design_sparrow_reattach_timer > 0:
+                self.design_sparrow_reattach_timer = max(0.0, self.design_sparrow_reattach_timer - dt)
+            else:
+                allies = [
+                    c for c in game_state.get("characters", [])
+                    if c.alive and c.owner_id == self.owner_id and c is not self and getattr(c, "design_corrupted_blood", 0.0) <= 0
+                ]
+                if allies:
+                    nearest = min(allies, key=lambda c: (c.pos - self.pos).length_squared())
+                    self.attach_sparrow_host(nearest, game_state)
+        else:
+            # 附着中：雀影隐身挂机，位置跟随宿主（特效用）
+            self.vel *= 0.0
+            self.pos = pygame.Vector2(host.pos) + pygame.Vector2(0, -host.radius - 16)
+            self.update_rect()
+
     def throw_potion(self, target, game_state=None):
         if not self.alive or target is None or not getattr(target, "alive", False):
             return
@@ -9941,6 +10027,8 @@ class Character:
                 damage *= 1.0 - SQUAD_PROTECT_REDUCTION
             if self.design_wild_brew_timer > 0:
                 damage *= 1.0 + WILD_BREW_PENALTY
+            if self.design_corrupted_blood > 0 and str(damage_type).startswith("design_spell_"):
+                damage *= 1.0 - SPARROW_SPELL_REDUCTION
         if src_char is not None and src_char.owner_id != self.owner_id:
             if self.design_squad_mark_timer > 0 and self.design_squad_mark_owner_id == src_char.owner_id:
                 friends = max(1, sum(1 for c in game_state.get("characters", []) if c.alive and c.owner_id == src_char.owner_id))
@@ -10135,7 +10223,18 @@ class Character:
             self.knight_recorded_damage += damage
         pre_damage_hp = self.hp
         self.damageTaken += damage
-        self.hp -= damage
+        if self.design_corrupted_blood > 0:
+            hp_absorb = min(damage, self.hp)
+            self.hp -= hp_absorb
+            leftover = damage - hp_absorb
+            if leftover > 0:
+                self.design_corrupted_blood -= leftover / SPARROW_BLOOD_ABSORB_RATIO
+                if game_state is not None:
+                    spawn_damage_text(game_state, self, 0.0, text=f"腐血-{leftover:.0f}", color=SPARROW_BLOOD_COLOR)
+                if self.design_corrupted_blood <= 0:
+                    self.design_corrupted_blood = 0.0
+        else:
+            self.hp -= damage
         handle_equilibrium_thresholds(self, pre_damage_hp, source_character, game_state, ignore_equilibrium_thresholds=ignore_equilibrium_thresholds)
         if self.is_phoenix() and self.design_phoenix_egg_timer > 0:
             if self.design_phoenix_egg_shield <= 0:
@@ -10162,7 +10261,13 @@ class Character:
                     crit=is_true_damage or damage >= DAMAGE_TEXT_CRIT_THRESHOLD,
                 )
             )
-        if self.hp <= 0:
+        if self.hp <= 0 and self.design_corrupted_blood <= 0:
+            self.design_corrupted_blood = 0.0
+            if game_state is not None:
+                for candidate in game_state.get("characters", []):
+                    if candidate.design_meta.get("role_num") == 116 and candidate.design_sparrow_host_id == self.id:
+                        candidate.design_sparrow_host_id = None
+                        candidate.design_sparrow_reattach_timer = SPARROW_REATTACH_DELAY
             if self.job_name == "DesignRole62_lich" and not self.design_has_revived:
                 self.design_has_revived = True
                 self.hp = max(1.0, self.max_hp * 0.3)
@@ -11234,6 +11339,8 @@ class Character:
             self.design_wild_brew_timer = max(0.0, self.design_wild_brew_timer - dt)
         if self.design_protect_timer > 0:
             self.design_protect_timer = max(0.0, self.design_protect_timer - dt)
+        if self.design_sparrow_fury_timer > 0:
+            self.design_sparrow_fury_timer = max(0.0, self.design_sparrow_fury_timer - dt)
         if self.design_squad_mark_timer > 0:
             self.design_squad_mark_timer = max(0.0, self.design_squad_mark_timer - dt)
             if self.design_squad_mark_timer <= 0:
@@ -11285,6 +11392,7 @@ class Character:
             while self.design_potion_cooldown_timer <= 0:
                 self.design_potion_cooldown_timer += POTION_INTERVAL
                 self.throw_potion_to_nearest_ally(game_state)
+        self.update_sparrow_host(dt, game_state)
         if self.is_soul_moth() and self.design_soul_moth_form:
             self.design_soul_moth_timer = max(0.0, self.design_soul_moth_timer - dt)
             if self.design_soul_moth_timer <= 0:
@@ -11940,6 +12048,9 @@ class Character:
             return
 
         self.update_soul_blade(dt, game_state)
+        if self.design_sparrow_host_id is not None:
+            self.update_sparrow_host(dt, game_state)
+            return
 
         self.process_effects(dt, game_state)
         if not self.alive:
@@ -12419,6 +12530,16 @@ class Character:
 
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, mp_rect, 1, border_radius=2)
+        if self.design_corrupted_blood > 0:
+            blood_rect = pygame.Rect(hp_rect.left, mp_rect.bottom + 2, hp_rect.width, 4)
+            pygame.draw.rect(surface, (40, 34, 52), blood_rect, border_radius=2)
+            blood_cap = max(1.0, self.max_hp * SPARROW_BLOOD_RATIO)
+            blood_ratio = clamp(self.design_corrupted_blood / blood_cap, 0.0, 1.0)
+            if blood_ratio > 0:
+                fill = blood_rect.copy()
+                fill.width = max(1, int(blood_rect.width * blood_ratio))
+                pygame.draw.rect(surface, SPARROW_BLOOD_COLOR, fill, border_radius=2)
+            pygame.draw.rect(surface, BORDER_COLOR, blood_rect, 1, border_radius=2)
         total_shield = self.true_shield + self.bloodwraith_shield_hp + self.sea_tide_shield_hp
         if total_shield > 0:
             shield_rect = pygame.Rect(hp_rect.left, hp_rect.top - 7, hp_rect.width, 4)
@@ -12511,6 +12632,9 @@ class Character:
                 fill = bar_rect.copy()
                 fill.width = max(1, int(bar_rect.width * progress_ratio))
                 pygame.draw.rect(surface, BANISH_COLOR, fill, border_radius=2)
+        if self.design_corrupted_blood > 0:
+            pygame.draw.circle(surface, SPARROW_COLOR, (center[0], center[1] - self.radius - 8), 3)
+            pygame.draw.circle(surface, (255, 236, 210), (center[0], center[1] - self.radius - 8), 3, 1)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
