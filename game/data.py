@@ -3556,3 +3556,8 @@ def get_top_three_jobs(stats=None, min_matches=3):
     candidates.sort(key=lambda item: (-item[1], -item[2], -item[3], item[0]))
     return [item[0] for item in candidates[:3]]
 
+
+
+def get_battle_job_names():
+    names = [job for job in JOB_DEFS.keys() if job not in runtime._DISABLED_ROLE_KEYS]
+    return names or list(JOB_DEFS.keys())

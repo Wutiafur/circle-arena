@@ -7,3 +7,6 @@ battle_loop 每帧重绑 _LIVE_GAME_STATE / _LIVE_SPEED_MULTIPLIER，
 
 _LIVE_GAME_STATE = None
 _LIVE_SPEED_MULTIPLIER = 1.0
+
+# 禁用角色表（主菜单"禁用角色"设置，最多 3 个），按 job_name 存放
+_DISABLED_ROLE_KEYS = set()
