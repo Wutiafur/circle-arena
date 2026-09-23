@@ -3930,7 +3930,8 @@ def cast_design_skill(caster, game_state, token=None):
                 for enemy in enemies:
                     if distance_point_to_segment(enemy.pos, caster.pos, landing) <= enemy.radius + 14:
                         enemy.take_damage(28.0, source=caster, damage_type="design_physical_hero_dash", game_state=game_state)
-                        enemy.apply_slow(0.3, 2.0)
+                        if isinstance(enemy, Character):
+                            enemy.apply_slow(0.3, 2.0)
                 caster.pos = landing
                 caster.update_rect()
     elif token == "sunfire_kagura":
@@ -4261,7 +4262,7 @@ def cast_design_skill(caster, game_state, token=None):
         if current_form == "white":
             caster.heal(TWIN_MIRROR_WHITE_HEAL)
             for enemy in enemies:
-                if (enemy.pos - caster.pos).length() <= 40.0 + getattr(enemy, "radius", 0):
+                if (enemy.pos - caster.pos).length() <= 40.0 + getattr(enemy, "radius", 0) and isinstance(enemy, Character):
                     enemy.apply_knockback(enemy.pos - caster.pos, TWIN_MIRROR_WHITE_KNOCKBACK)
         else:
             target = select_nearest_enemy(caster, game_state["characters"])
@@ -4292,7 +4293,8 @@ def cast_design_skill(caster, game_state, token=None):
             for enemy in enemies:
                 if distance_point_to_segment(enemy.pos, caster.pos, beam_end) <= enemy.radius + 16:
                     enemy.take_damage(30.0, source=caster, damage_type="design_physical_charge", game_state=game_state)
-                    enemy.apply_knockback(enemy.pos - caster.pos, 55.0)
+                    if isinstance(enemy, Character):
+                        enemy.apply_knockback(enemy.pos - caster.pos, 55.0)
             caster.pos = beam_end
             caster.update_rect()
     elif token == "phase_shift":
@@ -4353,8 +4355,9 @@ def cast_design_skill(caster, game_state, token=None):
             key=lambda enemy: (enemy.pos - caster.pos).length_squared(),
         )[:PHOENIX_WRATH_TARGETS]
         for enemy in nearest:
-            enemy.apply_phoenix_fire(1, source=caster, game_state=game_state)
-            enemy.design_phoenix_wrath_timer = PHOENIX_WRATH_DOT_DURATION
+            if isinstance(enemy, Character):
+                enemy.apply_phoenix_fire(1, source=caster, game_state=game_state)
+                enemy.design_phoenix_wrath_timer = PHOENIX_WRATH_DOT_DURATION
             enemy.design_phoenix_wrath_accum = 0.0
             enemy.design_phoenix_wrath_source = caster
     elif token == "xuanwu_bulwark":
@@ -4389,8 +4392,9 @@ def cast_design_skill(caster, game_state, token=None):
                 roar_damage = TIGER_ROAR_DAMAGE_BASE + TIGER_ROAR_DAMAGE_PER_POWER * caster.design_tiger_power
                 dealt = enemy.take_damage(roar_damage, source=caster, damage_type="design_physical_tiger_roar", game_state=game_state)
                 total_dealt += dealt
-                enemy.apply_tiger_wound(1)
-                enemy.apply_slow(TIGER_ROAR_SLOW, TIGER_ROAR_SLOW_DURATION)
+                if isinstance(enemy, Character):
+                    enemy.apply_tiger_wound(1)
+                    enemy.apply_slow(TIGER_ROAR_SLOW, TIGER_ROAR_SLOW_DURATION)
             if prey is not None and prey.alive and prey in roar_targets:
                 prey.apply_tiger_wound(1)
                 caster.heal(total_dealt * TIGER_ROAR_HEAL_RATIO)
@@ -4457,7 +4461,7 @@ def cast_design_skill(caster, game_state, token=None):
             if ring_distance <= FLAME_WHEEL_RADIUS + getattr(enemy, "radius", 0):
                 enemy.take_damage(FLAME_WHEEL_DAMAGE, source=caster, damage_type="design_spell_flame_wheel", game_state=game_state)
                 knock_dir = enemy.pos - caster.pos
-                if knock_dir.length_squared() > 0:
+                if knock_dir.length_squared() > 0 and isinstance(enemy, Character):
                     enemy.apply_knockback(knock_dir, FLAME_WHEEL_KNOCKBACK)
         add_design_effect(
             game_state,
@@ -4515,7 +4519,8 @@ def cast_design_skill(caster, game_state, token=None):
                 enemy.take_damage(RIFT_DASH_DAMAGE, source=caster, damage_type="design_spell_rift_dash", game_state=game_state)
                 perp = pygame.Vector2(-direction.y, direction.x)
                 side = 1.0 if (enemy.pos - start_pos).dot(perp) >= 0 else -1.0
-                enemy.apply_knockback(perp * side, RIFT_DASH_KNOCKBACK)
+                if isinstance(enemy, Character):
+                    enemy.apply_knockback(perp * side, RIFT_DASH_KNOCKBACK)
         caster.pos = end_pos
         caster.update_rect()
         add_design_effect(
@@ -4722,7 +4727,8 @@ def cast_design_skill(caster, game_state, token=None):
         for enemy in enemies:
             if distance_point_to_segment(enemy.pos, caster.pos, beam_end) <= enemy.radius + 18:
                 enemy.take_damage(hp_cost, source=caster, damage_type="true_design_blood_contract_hit", game_state=game_state)
-                enemy.apply_silence(2.0)
+                if isinstance(enemy, Character):
+                    enemy.apply_silence(2.0)
     elif token == "one_inch_punch":
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is not None:
@@ -7593,14 +7599,17 @@ class Character:
                 )
             )
 
-        if not self.held_weapon.get("infinite_ammo"):
-            self.held_weapon["ammo"] -= 1
         cooldown = self.get_weapon_attack_cooldown(weapon_def["fire_interval"])
         self.attack_cooldown = cooldown
-        self.held_weapon["cooldown"] = cooldown
         self.on_attack_committed()
-        if self.held_weapon["ammo"] <= 0:
-            self.clear_weapon()
+        # 冷锋枪(spear_thrust)分支可能在上面 clear_weapon() 把 held_weapon 置 None，
+        # 故弹药结算需在冷却/提交之后、并以 None 守卫包裹，避免 AttributeError。
+        if self.held_weapon is not None:
+            if not self.held_weapon.get("infinite_ammo"):
+                self.held_weapon["ammo"] -= 1
+            self.held_weapon["cooldown"] = cooldown
+            if self.held_weapon["ammo"] <= 0:
+                self.clear_weapon()
 
     def cast_skill(self, game_state):
         if not self.alive or self.clone_mode is not None:
