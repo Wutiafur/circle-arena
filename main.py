@@ -847,6 +847,16 @@ TIDE_HEAL_RATIO = 0.015
 TIDE_CC_REDUCTION = 0.20
 TIDE_MP_RATIO = 0.03
 TIDE_COLOR = (86, 200, 230)
+# 119 血裔狂徒
+BLOODSUCKER_JOB_NAME = "DesignRole119_bloodsucker"
+BLOODSUCKER_LIFESTEAL_RATIO = 0.12
+BLOODSUCKER_CURSE_MAX = 5
+BLOODSUCKER_CURSE_LIFESTEAL_PER = 0.02
+BLOODSUCKER_CURSE_DURATION = 3.0
+BLOODSUCKER_FEAST_DURATION = 5.0
+BLOODSUCKER_FEAST_LIFESTEAL_MULT = 2.0
+BLOODSUCKER_FEAST_TRUE_RATIO = 0.03
+BLOODSUCKER_COLOR = (214, 64, 64)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -7111,6 +7121,11 @@ def fire_design_basic_attack(attacker, target, game_state):
                 if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.15:
                     target.take_damage(target.hp + 1.0, source=attacker, damage_type="true_design_execute", game_state=game_state)
                     attacker.design_execute_buff_timer = 5.0
+                if role_num == 119 and attacker.design_blood_feast_timer > 0:
+                    target.design_blood_curse = min(BLOODSUCKER_CURSE_MAX, getattr(target, "design_blood_curse", 0) + 1)
+                    target.design_blood_curse_timer = BLOODSUCKER_CURSE_DURATION
+                    lost_hp = max(0.0, target.max_hp - target.hp)
+                    target.take_damage(lost_hp * BLOODSUCKER_FEAST_TRUE_RATIO, source=attacker, damage_type="true_design_blood_feast", game_state=game_state)
         stun_duration = attacker.get_current_melee_stun_duration()
         if stun_duration > 0:
             call_target_method(target, "apply_stun", stun_duration)
@@ -7395,6 +7410,10 @@ def cast_design_skill(caster, game_state, token=None):
         target.design_squad_primary_owner_id = caster.owner_id
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
+    elif role_num == 119 or token == "blood_feast":
+        caster.design_blood_feast_timer = BLOODSUCKER_FEAST_DURATION
+        spawn_attack_impact(game_state, caster.pos, BLOODSUCKER_COLOR, radius=20, thickness=3, burst_count=14)
         return True
     elif role_num == 118 or token == "tide_link":
         if caster.design_tide_link_active:
@@ -8398,6 +8417,9 @@ class Character:
         self.design_tide_heal_tick = 0.0
         self.design_tide_hub_id = None
         self._tide_share = False
+        self.design_blood_curse = 0
+        self.design_blood_curse_timer = 0.0
+        self.design_blood_feast_timer = 0.0
         self.design_banish_pulse = 0.0
         self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
@@ -10188,6 +10210,12 @@ class Character:
                 damage *= 1.0 + SQUAD_FOCUS_BONUS
             if getattr(src_char, "design_banner_lifesteal_timer", 0.0) > 0 and damage > 0:
                 src_char.heal(damage * BANNER_LIFESTEAL)
+            if src_char.design_meta.get("role_num") == 119 and damage > 0:
+                curse_lifesteal = BLOODSUCKER_CURSE_LIFESTEAL_PER * min(BLOODSUCKER_CURSE_MAX, getattr(self, "design_blood_curse", 0))
+                lifesteal_rate = BLOODSUCKER_LIFESTEAL_RATIO + curse_lifesteal
+                if getattr(src_char, "design_blood_feast_timer", 0.0) > 0:
+                    lifesteal_rate *= BLOODSUCKER_FEAST_LIFESTEAL_MULT
+                src_char.heal(damage * lifesteal_rate)
         source_character = None
         if isinstance(source, Character):
             source_character = source
@@ -11508,6 +11536,12 @@ class Character:
                 self.design_tide_hub_id = None
         else:
             self.design_tide_heal_tick = 0.0
+        if self.design_blood_feast_timer > 0:
+            self.design_blood_feast_timer = max(0.0, self.design_blood_feast_timer - dt)
+        if self.design_blood_curse_timer > 0:
+            self.design_blood_curse_timer = max(0.0, self.design_blood_curse_timer - dt)
+            if self.design_blood_curse_timer <= 0:
+                self.design_blood_curse = 0
         if self.design_squad_mark_timer > 0:
             self.design_squad_mark_timer = max(0.0, self.design_squad_mark_timer - dt)
             if self.design_squad_mark_timer <= 0:
@@ -12805,6 +12839,9 @@ class Character:
         if self.design_tide_link_active:
             pygame.draw.circle(surface, TIDE_COLOR, (center[0] - 5, center[1] - self.radius - 24), 2)
             pygame.draw.circle(surface, (180, 240, 255), (center[0] - 5, center[1] - self.radius - 24), 2, 1)
+        if self.design_blood_feast_timer > 0:
+            pygame.draw.circle(surface, BLOODSUCKER_COLOR, center, round(self.radius + 9), 2)
+            pygame.draw.circle(surface, (120, 20, 30), center, round(self.radius + 5), 1)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
@@ -13881,6 +13918,11 @@ def describe_design_state(character):
         if character.design_raikiri_mark:
             parts.append(f"雷痕{character.design_raikiri_mark}")
         parts.append(f"段{character.design_raikiri_stage + 1}")
+    elif character.design_meta.get("role_num") == 119:
+        if character.design_blood_feast_timer > 0:
+            parts.append("盛宴")
+        if character.design_blood_curse:
+            parts.append(f"血咒{character.design_blood_curse}")
     elif character.job_name == "DesignRole90_collector":
         if character.design_collect_fervor:
             parts.append(f"狂热{character.design_collect_fervor}")
