@@ -197,6 +197,7 @@ ROLE_CONFIG_OVERRIDES = {
     114: {"skill_token": "squad_focus", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 10.0},
     115: {"skill_token": "void_banish", "basic_damage_kind": "spell", "mp_mode": "damage_dealt_scaled", "mp_rate": 1.0},
     116: {"skill_token": "sparrow_swap", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 8.0},
+    117: {"skill_token": "raikiri_first", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 8.0 / 10.0},
 }
 
 

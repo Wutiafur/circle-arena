@@ -821,6 +821,24 @@ SPARROW_SWAP_DAMAGE = 40.0
 SPARROW_REATTACH_DELAY = 1.0
 SPARROW_COLOR = (236, 144, 96)
 SPARROW_BLOOD_COLOR = (150, 70, 200)
+# 117 雷切剑豪
+RAIKIRI_JOB_NAME = "DesignRole117_raikiri_blademaster"
+RAIKIRI_STAGE1_DASH = 90.0
+RAIKIRI_STAGE1_DAMAGE = 30.0
+RAIKIRI_STAGE1_SLOW = 0.25
+RAIKIRI_STAGE2_JUMP = 50.0
+RAIKIRI_STAGE2_RANGE = 80.0
+RAIKIRI_STAGE2_DAMAGE = 35.0
+RAIKIRI_STAGE2_ROOT = 0.8
+RAIKIRI_STAGE3_RADIUS = 90.0
+RAIKIRI_STAGE3_DAMAGE = 60.0
+RAIKIRI_STAGE3_STUN = 1.0
+RAIKIRI_MARK_MAX = 3
+RAIKIRI_MARK_SLOW_PER = 0.05
+RAIKIRI_CHAIN_RATIO = 0.5
+RAIKIRI_CHAIN_RANGE = 90.0
+RAIKIRI_SKILL_HIT_MP = 15.0
+RAIKIRI_COLOR = (120, 200, 255)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -6667,6 +6685,18 @@ def spawn_windstorm_blade_projectile(
     )
 
 
+def apply_raikiri_mark(attacker, target, amount, game_state):
+    if not isinstance(target, Character):
+        return
+    previous = getattr(target, "design_raikiri_mark", 0)
+    new_mark = min(RAIKIRI_MARK_MAX, previous + amount)
+    target.design_raikiri_mark = new_mark
+    if new_mark > 0 and hasattr(target, "apply_slow"):
+        target.apply_slow(RAIKIRI_MARK_SLOW_PER * new_mark, 3.0)
+    if game_state is not None:
+        spawn_damage_text(game_state, target, 0.0, text=f"雷痕{new_mark}", color=RAIKIRI_COLOR)
+
+
 def apply_design_hit_effects(attacker, target, game_state, is_melee):
     if not isinstance(target, Character):
         return
@@ -6758,6 +6788,18 @@ def apply_design_hit_effects(attacker, target, game_state, is_melee):
     if role_num == 114:
         target.design_squad_mark_timer = SQUAD_MARK_DURATION
         target.design_squad_mark_owner_id = attacker.owner_id
+    if role_num == 117 and getattr(target, "design_raikiri_mark", 0) > 0:
+        chain_target = None
+        for candidate in get_targetables(game_state):
+            if candidate.alive and candidate.owner_id != attacker.owner_id and candidate is not target:
+                if (candidate.pos - target.pos).length() <= RAIKIRI_CHAIN_RANGE:
+                    chain_target = candidate
+                    break
+        if chain_target is not None:
+            chain_damage = attacker.get_current_basic_damage() * RAIKIRI_CHAIN_RATIO
+            chain_target.take_damage(chain_damage, source=attacker, damage_type="design_spell_raikiri_chain", game_state=game_state)
+            game_state["beam_events"].append(BeamEvent(target.pos, chain_target.pos, (180, 230, 255)))
+        target.design_raikiri_mark = max(0, getattr(target, "design_raikiri_mark", 0) - 1)
     if role_num == 77:
         attacker.design_shadow_stacks = min(SHADOW_VALUE_MAX, attacker.design_shadow_stacks + 1)
         call_target_method(target, "apply_slow", 0.2, 1.0)
@@ -7345,6 +7387,60 @@ def cast_design_skill(caster, game_state, token=None):
         target.design_squad_primary_owner_id = caster.owner_id
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
+    elif role_num == 117 or token == "raikiri_first":
+        stage = getattr(caster, "design_raikiri_stage", 0)
+        if stage == 0:
+            target = select_nearest_enemy(caster, game_state["characters"])
+            if target is None:
+                return False
+            direction = target.pos - caster.pos
+            if direction.length_squared() == 0:
+                direction = random_unit_vector()
+            direction = direction.normalize()
+            distance = (target.pos - caster.pos).length()
+            dash = min(RAIKIRI_STAGE1_DASH, max(0.0, distance - target.radius - caster.radius - 4.0))
+            start_pos = pygame.Vector2(caster.pos)
+            caster.pos += direction * dash
+            caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+            caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+            caster.update_rect()
+            game_state["beam_events"].append(BeamEvent(start_pos, caster.pos, RAIKIRI_COLOR))
+            dealt = target.take_damage(RAIKIRI_STAGE1_DAMAGE, source=caster, damage_type="design_physical_raikiri_1", game_state=game_state)
+            if dealt > 0:
+                target.apply_slow(RAIKIRI_STAGE1_SLOW, 1.0)
+                apply_raikiri_mark(caster, target, 1, game_state)
+            spawn_attack_impact(game_state, target.pos, RAIKIRI_COLOR, radius=12, thickness=2, burst_count=8)
+        elif stage == 1:
+            target = select_nearest_enemy(caster, game_state["characters"])
+            back = -caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
+            back = back.normalize()
+            pre_pos = pygame.Vector2(caster.pos)
+            caster.pos += back * RAIKIRI_STAGE2_JUMP
+            caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+            caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+            caster.update_rect()
+            if target is not None and (target.pos - pre_pos).length() <= RAIKIRI_STAGE2_RANGE + getattr(target, "radius", 0):
+                game_state["beam_events"].append(BeamEvent(pre_pos, target.pos, (180, 230, 255)))
+                dealt = target.take_damage(RAIKIRI_STAGE2_DAMAGE, source=caster, damage_type="design_spell_raikiri_2", game_state=game_state)
+                if dealt > 0:
+                    target.apply_root(RAIKIRI_STAGE2_ROOT)
+                    apply_raikiri_mark(caster, target, 1, game_state)
+        else:
+            hit_any = False
+            for victim in enemies:
+                if victim.alive and (victim.pos - caster.pos).length() <= RAIKIRI_STAGE3_RADIUS + getattr(victim, "radius", 0):
+                    dealt = victim.take_damage(RAIKIRI_STAGE3_DAMAGE, source=caster, damage_type="design_spell_raikiri_3", game_state=game_state)
+                    if dealt > 0:
+                        call_target_method(victim, "apply_stun", RAIKIRI_STAGE3_STUN)
+                        apply_raikiri_mark(caster, victim, 3, game_state)
+                        spawn_attack_impact(game_state, victim.pos, RAIKIRI_COLOR, radius=14, thickness=3, burst_count=12)
+                        hit_any = True
+            if hit_any:
+                game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.08)
+                game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 3.0)
+        caster.design_raikiri_stage = (stage + 1) % 3
+        caster.gain_mp(RAIKIRI_SKILL_HIT_MP, "raikiri_hit")
         return True
     elif role_num == 116 or token == "sparrow_swap":
         current_host = caster.get_sparrow_host(game_state)
@@ -8267,6 +8363,8 @@ class Character:
         self.design_sparrow_reattach_timer = 0.0
         self.design_corrupted_blood = 0.0
         self.design_sparrow_fury_timer = 0.0
+        self.design_raikiri_stage = 0
+        self.design_raikiri_mark = 0
         self.design_banish_pulse = 0.0
         self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
@@ -13691,6 +13789,10 @@ def describe_design_state(character):
     elif character.design_meta.get("role_num") == 59:
         if character.design_ranger_lock_timer > 0:
             parts.append(f"猎魂{character.design_ranger_lock_timer:.0f}s")
+    elif character.design_meta.get("role_num") == 117:
+        if character.design_raikiri_mark:
+            parts.append(f"雷痕{character.design_raikiri_mark}")
+        parts.append(f"段{character.design_raikiri_stage + 1}")
     elif character.job_name == "DesignRole90_collector":
         if character.design_collect_fervor:
             parts.append(f"狂热{character.design_collect_fervor}")
