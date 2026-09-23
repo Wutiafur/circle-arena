@@ -6,6 +6,8 @@ import random
 import pygame
 
 from game.data import *
+from game.utils import *
+from game.drawing import *
 from game.engine import *
 from game import runtime
 
