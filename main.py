@@ -839,6 +839,14 @@ RAIKIRI_CHAIN_RATIO = 0.5
 RAIKIRI_CHAIN_RANGE = 90.0
 RAIKIRI_SKILL_HIT_MP = 15.0
 RAIKIRI_COLOR = (120, 200, 255)
+# 118 潮汐妖灵 涓灵
+TIDE_SPRITE_JOB_NAME = "DesignRole118_tide_sprite"
+TIDE_LINK_DURATION = 6.0
+TIDE_HEAL_INTERVAL = 2.0
+TIDE_HEAL_RATIO = 0.015
+TIDE_CC_REDUCTION = 0.20
+TIDE_MP_RATIO = 0.03
+TIDE_COLOR = (86, 200, 230)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -7388,6 +7396,26 @@ def cast_design_skill(caster, game_state, token=None):
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
         return True
+    elif role_num == 118 or token == "tide_link":
+        if caster.design_tide_link_active:
+            for ally in game_state.get("characters", []):
+                if getattr(ally, "design_tide_hub_id", None) == caster.id:
+                    ally.design_tide_link_active = False
+                    ally.design_tide_link_timer = 0.0
+                    ally.design_tide_hub_id = None
+            caster.design_tide_link_active = False
+            caster.design_tide_link_timer = 0.0
+            caster.design_tide_hub_id = None
+            return True
+        allies = [c for c in game_state.get("characters", []) if c.alive and c.owner_id == caster.owner_id]
+        if len(allies) < 2:
+            return False  # 团队战才有效（无同队无法链接）
+        for ally in allies:
+            ally.design_tide_link_active = True
+            ally.design_tide_link_timer = TIDE_LINK_DURATION
+            ally.design_tide_hub_id = caster.id
+        spawn_attack_impact(game_state, caster.pos, TIDE_COLOR, radius=26, thickness=3, burst_count=14)
+        return True
     elif role_num == 117 or token == "raikiri_first":
         stage = getattr(caster, "design_raikiri_stage", 0)
         if stage == 0:
@@ -8365,6 +8393,11 @@ class Character:
         self.design_sparrow_fury_timer = 0.0
         self.design_raikiri_stage = 0
         self.design_raikiri_mark = 0
+        self.design_tide_link_active = False
+        self.design_tide_link_timer = 0.0
+        self.design_tide_heal_tick = 0.0
+        self.design_tide_hub_id = None
+        self._tide_share = False
         self.design_banish_pulse = 0.0
         self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
@@ -9952,17 +9985,23 @@ class Character:
     def apply_slow(self, amount, duration):
         if self.job_name == "DesignRole64_dreamweaver":
             return
+        if self.design_tide_link_active:
+            duration *= 1.0 - TIDE_CC_REDUCTION
         self.slow_timer = max(self.slow_timer, duration)
         self.slow_factor = max(self.slow_factor, amount)
 
     def apply_stun(self, duration):
         if self.control_immunity_timer > 0 or self.job_name == "DesignRole64_dreamweaver":
             return
+        if self.design_tide_link_active:
+            duration *= 1.0 - TIDE_CC_REDUCTION
         self.stun_timer = max(self.stun_timer, duration)
 
     def apply_root(self, duration):
         if self.control_immunity_timer > 0 or self.job_name == "DesignRole64_dreamweaver":
             return
+        if self.design_tide_link_active:
+            duration *= 1.0 - TIDE_CC_REDUCTION
         self.root_timer = max(self.root_timer, duration)
 
     def try_pickup_weapon(self, weapon_orb):
@@ -10110,6 +10149,20 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
+        if self.design_tide_link_active and not self._tide_share and damage > 0 and game_state is not None:
+            members = [m for m in game_state.get("characters", []) if m.alive and getattr(m, "design_tide_link_active", False)]
+            if len(members) >= 2:
+                share = damage / len(members)
+                for member in members:
+                    member._tide_share = True
+                    member.take_damage(share, source=source, damage_type=damage_type, game_state=game_state)
+                    member._tide_share = False
+                hub_id = self.design_tide_hub_id
+                if hub_id is not None:
+                    hub_char = next((c for c in game_state.get("characters", []) if c.id == hub_id), None)
+                    if hub_char is not None and getattr(hub_char, "alive", False):
+                        hub_char.gain_mp(damage * TIDE_MP_RATIO, "tide_share")
+                return amount
         if self.job_name == "DesignRole91_phantom_lancer" and self.vel.length() > 30.0 and not is_true_damage:
             damage *= 0.88
         # 队友增益互联（112-114）：旗区减伤/掩护减伤/狂野加重/协同与集火增伤/旗区吸血
@@ -10366,6 +10419,10 @@ class Character:
                     if candidate.design_meta.get("role_num") == 116 and candidate.design_sparrow_host_id == self.id:
                         candidate.design_sparrow_host_id = None
                         candidate.design_sparrow_reattach_timer = SPARROW_REATTACH_DELAY
+                    if getattr(candidate, "design_tide_hub_id", None) == self.id and candidate is not self:
+                        candidate.design_tide_link_active = False
+                        candidate.design_tide_link_timer = 0.0
+                        candidate.design_tide_hub_id = None
             if self.job_name == "DesignRole62_lich" and not self.design_has_revived:
                 self.design_has_revived = True
                 self.hp = max(1.0, self.max_hp * 0.3)
@@ -11439,6 +11496,18 @@ class Character:
             self.design_protect_timer = max(0.0, self.design_protect_timer - dt)
         if self.design_sparrow_fury_timer > 0:
             self.design_sparrow_fury_timer = max(0.0, self.design_sparrow_fury_timer - dt)
+        if self.design_tide_link_active:
+            self.design_tide_link_timer = max(0.0, self.design_tide_link_timer - dt)
+            self.design_tide_heal_tick += dt
+            while self.design_tide_heal_tick >= TIDE_HEAL_INTERVAL:
+                self.design_tide_heal_tick -= TIDE_HEAL_INTERVAL
+                self.heal(self.max_hp * TIDE_HEAL_RATIO)
+            if self.design_tide_link_timer <= 0:
+                self.design_tide_link_active = False
+                self.design_tide_link_timer = 0.0
+                self.design_tide_hub_id = None
+        else:
+            self.design_tide_heal_tick = 0.0
         if self.design_squad_mark_timer > 0:
             self.design_squad_mark_timer = max(0.0, self.design_squad_mark_timer - dt)
             if self.design_squad_mark_timer <= 0:
@@ -12733,6 +12802,9 @@ class Character:
         if self.design_corrupted_blood > 0:
             pygame.draw.circle(surface, SPARROW_COLOR, (center[0], center[1] - self.radius - 8), 3)
             pygame.draw.circle(surface, (255, 236, 210), (center[0], center[1] - self.radius - 8), 3, 1)
+        if self.design_tide_link_active:
+            pygame.draw.circle(surface, TIDE_COLOR, (center[0] - 5, center[1] - self.radius - 24), 2)
+            pygame.draw.circle(surface, (180, 240, 255), (center[0] - 5, center[1] - self.radius - 24), 2, 1)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
@@ -13058,6 +13130,22 @@ def draw_world(surface, game_state, label_font):
             damage_text.draw(surface, label_font)
     for banner in game_state.get("kill_banners", []):
         banner.draw(surface, label_font)
+    active_members = [c for c in game_state.get("characters", []) if getattr(c, "design_tide_link_active", False)]
+    if len(active_members) >= 2:
+        hub = next((c for c in active_members if getattr(c, "design_tide_hub_id", None) is None), None)
+        if hub is None:
+            hub_id = active_members[0].design_tide_hub_id
+            hub = next((c for c in game_state.get("characters", []) if c.alive and c.id == hub_id), None)
+        if hub is not None:
+            for member in active_members:
+                if member is not hub:
+                    pygame.draw.line(
+                        surface,
+                        TIDE_COLOR,
+                        (round(hub.pos.x), round(hub.pos.y)),
+                        (round(member.pos.x), round(member.pos.y)),
+                        2,
+                    )
 
 
 def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hover_name, disable_timed_weapon_drops, disabled_count=0):
@@ -13134,7 +13222,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     draw_panel(screen, win_rate_rect, win_rate_color, radius=12, shadow_offset=(2, 3))
 
     # 开始按钮 ▶ 图标 + 文案
-    start_text = button_font.render("开始战斗", True, TEXT_COLOR)
+    start_text = button_font.render("死斗战", True, TEXT_COLOR)
     tri = [(start_rect.left + 24, start_rect.centery - 9), (start_rect.left + 24, start_rect.centery + 9), (start_rect.left + 36, start_rect.centery)]
     pygame.draw.polygon(screen, (255, 214, 120), tri)
     screen.blit(start_text, start_text.get_rect(center=(start_rect.centerx + 6, start_rect.centery)))
@@ -13190,7 +13278,7 @@ def draw_menu(screen, title_font, subtitle_font, button_font, player_count, hove
     screen.blit(settings_text, (settings_rect.left + 34, settings_rect.centery - settings_text.get_height() // 2))
 
     # 底部信息条
-    version_text = subtitle_font.render(f"已收录 {len(JOB_DEFS)} 名角色 · 圆环斗场 v0.9 · Enter 开始战斗", True, (150, 164, 180))
+    version_text = subtitle_font.render(f"已收录 {len(JOB_DEFS)} 名角色 · 圆环斗场 v0.9 · Enter 进入死斗战", True, (150, 164, 180))
     screen.blit(version_text, version_text.get_rect(midbottom=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 10)))
 
     return {
