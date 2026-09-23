@@ -17,13 +17,24 @@ python main.py
 
 ```
 circle/
-├── main.py                 # 游戏本体（菜单/战斗/图鉴/效果图鉴/胜率统计/崩溃报告）
+├── main.py                 # 入口薄壳（from game import * + main()）
+├── game/                   # 游戏逻辑包（自 15471 行单文件 main.py 拆分）
+│   ├── data.py             #   常量 + 角色/效果数据 + 图鉴/胜率访问
+│   ├── character.py        #   Character 角色类
+│   ├── engine.py           #   战斗核心（目标选择/特效实体/技能分派）
+│   ├── ui.py               #   界面绘制（菜单/图鉴/胜率/侧边栏）
+│   ├── loops.py            #   流程控制（各游戏循环 + main()）
+│   ├── world.py            #   世界层（刷怪/场景绘制/状态创建/更新）
+│   ├── utils.py            #   纯工具（颜色/几何/文本）
+│   ├── drawing.py          #   绘制辅助（形状图标/图鉴详情面板）
+│   ├── runtime.py          #   跨模块共享可变全局
+│   └── paths.py            #   项目根路径锚点
 ├── design_characters.py    # 从 sheding/charactor.md 解析设计角色的生成器
+├── tests/regress.py        # headless 回归测试（数据完整性 + 死斗模拟 + 渲染冒烟）
 ├── LaunchGame.bat          # Windows 一键启动脚本
-├── itch_page.html          # itch.io 宣传页
 ├── win_rate_stats.json     # 各角色胜率统计（对局后自动更新）
 ├── sheding/
-│   ├── charactor.md        # 设计角色图鉴数据（41~102 号等，改它=加角色）
+│   ├── charactor.md        # 设计角色图鉴数据（改它=加角色）
 │   └── 角色模板.md          # 新增角色的填写模板
 ├── bug/                    # 崩溃报告归档（自动生成的进 bug/crash_*.txt）
 └── 预览图                 (*.png 菜单/战斗/图鉴截图)
@@ -31,7 +42,7 @@ circle/
 
 ## 🎮 内容概览
 
-- **103 个角色**（40 个基础角色 + 63 个设计角色），包含四圣兽（玄武 100 / 白虎 101 / 青龙 102 / 凤凰 99）、雷神须佐之男（103）与特殊机制角色
+- **120 个角色**（40 个基础角色 + 80 个设计/特殊角色），包含四圣兽（玄武 100 / 白虎 101 / 青龙 102 / 凤凰 99）、雷神须佐之男（103）、以及 104~120 号新角色与特殊机制角色
 - **自动战斗**：角色自行寻敌、普攻充能、释放技能，混战决出胜负
 - **角色图鉴**：编号排序、搜索、形态展示、战绩联动（详情页显示出场/胜率）
 - **效果图鉴**：负面/正面状态说明
@@ -42,7 +53,14 @@ circle/
 
 1. 在 `sheding/charactor.md` 末尾按 `角色模板.md` 格式添加角色块（编号+中文名+英文名）
 2. 特殊技能 token 等在 `design_characters.py` 的 `ROLE_CONFIG_OVERRIDES` 中挂载
-3. 复杂机制在 `main.py` 中实现对应逻辑
+3. 复杂机制在 `game/` 包对应模块实现：技能分派 → `engine.py` 的 `cast_design_skill`；角色属性 → `character.py`；数值/图鉴数据 → `data.py`
+
+## 🧪 回归测试
+
+```bash
+python tests/regress.py          # 默认 20 人死斗模拟 2400 帧 + 单帧渲染冒烟
+python tests/regress.py 1200 12  # 自定义帧数/人数
+```
 
 ## 🛠️ 近期优化记录
 
