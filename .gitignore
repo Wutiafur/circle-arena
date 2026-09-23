@@ -18,3 +18,6 @@ desktop.ini
 # 临时扫描脚本
 _scan.py
 _scan_out.txt
+
+# 模块化拆分回归脚本（拆分完成后删除）
+_regress.py
