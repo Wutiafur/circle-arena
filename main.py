@@ -857,6 +857,20 @@ BLOODSUCKER_FEAST_DURATION = 5.0
 BLOODSUCKER_FEAST_LIFESTEAL_MULT = 2.0
 BLOODSUCKER_FEAST_TRUE_RATIO = 0.03
 BLOODSUCKER_COLOR = (214, 64, 64)
+# 120 白狐武士 藏势
+KENSHI_JOB_NAME = "DesignRole120_shiro_kenshi"
+KENSHI_COUNTER_CD = 4.0
+KENSHI_COUNTER_JUMP = 40.0
+KENSHI_COUNTER_DAMAGE = 35.0
+KENSHI_COUNTER_MP = 30.0
+KENSHI_MARK_MAX = 4
+KENSHI_MARK_DAMAGE_PER = 0.05
+KENSHI_MARK_DURATION = 6.0
+KENSHI_FLASH_DASH = 70.0
+KENSHI_FLASH_DAMAGE = 50.0
+KENSHI_FLASH_EXECUTE_MIN_MARK = 2
+KENSHI_FLASH_EXECUTE_RATIO = 0.08
+KENSHI_COLOR = (240, 240, 248)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -6715,6 +6729,16 @@ def apply_raikiri_mark(attacker, target, amount, game_state):
         spawn_damage_text(game_state, target, 0.0, text=f"雷痕{new_mark}", color=RAIKIRI_COLOR)
 
 
+def apply_kenshi_mark(attacker, target, amount, game_state):
+    if not isinstance(target, Character):
+        return
+    new_mark = min(KENSHI_MARK_MAX, getattr(target, "design_kenshi_mark", 0) + amount)
+    target.design_kenshi_mark = new_mark
+    target.design_kenshi_mark_timer = KENSHI_MARK_DURATION
+    if game_state is not None:
+        spawn_damage_text(game_state, target, 0.0, text=f"狐印{new_mark}", color=KENSHI_COLOR)
+
+
 def apply_design_hit_effects(attacker, target, game_state, is_melee):
     if not isinstance(target, Character):
         return
@@ -7410,6 +7434,27 @@ def cast_design_skill(caster, game_state, token=None):
         target.design_squad_primary_owner_id = caster.owner_id
         target.apply_slow(SQUAD_FOCUS_SLOW, 2.0)
         spawn_attack_impact(game_state, target.pos, (255, 90, 90), radius=12, thickness=3, burst_count=10)
+        return True
+    elif role_num == 120 or token == "kenshi_flash":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        direction = target.pos - caster.pos
+        if direction.length_squared() == 0:
+            direction = random_unit_vector()
+        direction = direction.normalize()
+        distance = (target.pos - caster.pos).length()
+        step = min(KENSHI_FLASH_DASH, max(0.0, distance - target.radius - caster.radius - 4.0))
+        caster.pos += direction * step
+        caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+        caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+        caster.update_rect()
+        dealt = target.take_damage(KENSHI_FLASH_DAMAGE, source=caster, damage_type="design_physical_kenshi_flash", game_state=game_state)
+        mark_count = getattr(target, "design_kenshi_mark", 0)
+        if dealt > 0 and mark_count >= KENSHI_FLASH_EXECUTE_MIN_MARK:
+            lost_hp = max(0.0, target.max_hp - target.hp)
+            target.take_damage(lost_hp * KENSHI_FLASH_EXECUTE_RATIO, source=caster, damage_type="true_design_kenshi_execute", game_state=game_state)
+        spawn_attack_impact(game_state, target.pos, KENSHI_COLOR, radius=12, thickness=2, burst_count=8)
         return True
     elif role_num == 119 or token == "blood_feast":
         caster.design_blood_feast_timer = BLOODSUCKER_FEAST_DURATION
@@ -8420,6 +8465,9 @@ class Character:
         self.design_blood_curse = 0
         self.design_blood_curse_timer = 0.0
         self.design_blood_feast_timer = 0.0
+        self.design_kenshi_counter_cd = 0.0
+        self.design_kenshi_mark = 0
+        self.design_kenshi_mark_timer = 0.0
         self.design_banish_pulse = 0.0
         self.design_banish_dust_timer = 0.0
         self.sniper_charge_timer = 0.0
@@ -10216,6 +10264,21 @@ class Character:
                 if getattr(src_char, "design_blood_feast_timer", 0.0) > 0:
                     lifesteal_rate *= BLOODSUCKER_FEAST_LIFESTEAL_MULT
                 src_char.heal(damage * lifesteal_rate)
+            if self.design_kenshi_mark > 0 and src_char.design_meta.get("role_num") == 120:
+                damage *= 1.0 + KENSHI_MARK_DAMAGE_PER * min(KENSHI_MARK_MAX, self.design_kenshi_mark)
+        if self.job_name == KENSHI_JOB_NAME and damage > 0 and src_char is not None and src_char.owner_id != self.owner_id and self.design_kenshi_counter_cd <= 0:
+            self.design_kenshi_counter_cd = KENSHI_COUNTER_CD
+            away = self.pos - src_char.pos
+            if away.length_squared() > 0:
+                self.pos += away.normalize() * KENSHI_COUNTER_JUMP
+                self.pos.x = clamp(self.pos.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
+                self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
+                self.update_rect()
+            counter_dealt = src_char.take_damage(KENSHI_COUNTER_DAMAGE, source=self, damage_type="design_physical_kenshi_counter", game_state=game_state)
+            if counter_dealt > 0:
+                apply_kenshi_mark(self, src_char, 1, game_state)
+            self.gain_mp(KENSHI_COUNTER_MP, "kenshi_counter")
+            spawn_attack_impact(game_state, src_char.pos, KENSHI_COLOR, radius=12, thickness=2, burst_count=8)
         source_character = None
         if isinstance(source, Character):
             source_character = source
@@ -11542,6 +11605,12 @@ class Character:
             self.design_blood_curse_timer = max(0.0, self.design_blood_curse_timer - dt)
             if self.design_blood_curse_timer <= 0:
                 self.design_blood_curse = 0
+        if self.design_kenshi_mark_timer > 0:
+            self.design_kenshi_mark_timer = max(0.0, self.design_kenshi_mark_timer - dt)
+            if self.design_kenshi_mark_timer <= 0:
+                self.design_kenshi_mark = 0
+        if self.design_kenshi_counter_cd > 0:
+            self.design_kenshi_counter_cd = max(0.0, self.design_kenshi_counter_cd - dt)
         if self.design_squad_mark_timer > 0:
             self.design_squad_mark_timer = max(0.0, self.design_squad_mark_timer - dt)
             if self.design_squad_mark_timer <= 0:
@@ -13923,6 +13992,9 @@ def describe_design_state(character):
             parts.append("盛宴")
         if character.design_blood_curse:
             parts.append(f"血咒{character.design_blood_curse}")
+    elif character.design_meta.get("role_num") == 120:
+        if character.design_kenshi_mark:
+            parts.append(f"狐印{character.design_kenshi_mark}")
     elif character.job_name == "DesignRole90_collector":
         if character.design_collect_fervor:
             parts.append(f"狂热{character.design_collect_fervor}")
