@@ -1051,7 +1051,8 @@ class Character:
         counter_damage = XUANWU_COUNTER_DAMAGE_BASE + XUANWU_COUNTER_DAMAGE_PER_SHELL * self.design_shell_stacks
         for enemy in nearest:
             enemy.take_damage(counter_damage, source=self, damage_type="design_spell_xuanwu_counter", game_state=game_state)
-            enemy.apply_slow(XUANWU_COUNTER_SLOW, XUANWU_COUNTER_SLOW_DURATION)
+            if isinstance(enemy, Character):
+                enemy.apply_slow(XUANWU_COUNTER_SLOW, XUANWU_COUNTER_SLOW_DURATION)
         self.consume_shells(XUANWU_COUNTER_SHELL_STEP, game_state)
 
     def xuanwu_bulwark_burst(self, game_state):
@@ -2493,12 +2494,13 @@ class Character:
                 game_state=game_state,
             )
         if self.is_ninja() and self.ninja_shadow_stacks > 0:
-            target.apply_blind(1.2 + 0.2 * self.ninja_shadow_stacks)
+            if isinstance(target, Character):
+                target.apply_blind(1.2 + 0.2 * self.ninja_shadow_stacks)
             self.ninja_shadow_stacks = 0
             self.ninja_shadow_timer = 0.0
         spawn_attack_impact(game_state, target.pos, self.get_visual_color(), radius=max(11, int(self.radius * 1.1)), damage=damage)
         stun_duration = self.get_current_melee_stun_duration()
-        if stun_duration > 0:
+        if stun_duration > 0 and isinstance(target, Character):
             target.apply_stun(stun_duration)
         cooldown = self.get_basic_attack_cooldown()
         self.attack_cooldown = cooldown
@@ -2562,7 +2564,7 @@ class Character:
                     )
                 )
                 spawn_attack_impact(game_state, start, self.color, radius=10, thickness=2, burst_count=4)
-                if self.is_ninja() and self.ninja_shadow_stacks > 0 and chosen is target:
+                if self.is_ninja() and self.ninja_shadow_stacks > 0 and chosen is target and isinstance(chosen, Character):
                     chosen.apply_blind(1.2 + 0.2 * self.ninja_shadow_stacks)
                     self.ninja_shadow_stacks = 0
                     self.ninja_shadow_timer = 0.0
@@ -3594,7 +3596,8 @@ class Character:
                     offset = self.pos - enemy.pos
                     if offset.length_squared() > 0 and getattr(enemy, "vel", pygame.Vector2()).length_squared() > 0:
                         if enemy.vel.normalize().dot(offset.normalize()) > 0.35:
-                            enemy.apply_slow(0.2, 0.2)
+                            if isinstance(enemy, Character):
+                                enemy.apply_slow(0.2, 0.2)
         if self.job_name == "Sniper":
             if (self.pos - self.position_lock).length() <= 4.0:
                 self.sniper_stationary_timer = min(SNIPER_STATIONARY_READY_TIME, self.sniper_stationary_timer + dt)

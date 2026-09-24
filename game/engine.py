@@ -3031,7 +3031,8 @@ def fire_design_basic_attack(attacker, target, game_state):
                 dealt = victim.take_damage(23.0, source=attacker, damage_type="design_physical_sunfire_4", game_state=game_state)
                 if dealt > 0:
                     apply_design_hit_effects(attacker, victim, game_state, True)
-                    victim.apply_slow(0.2, 2.0)
+                    if isinstance(victim, Character):
+                        victim.apply_slow(0.2, 2.0)
             if fire_form:
                 bonus_damage = attacker.max_hp * 0.04
                 for victim in targets:

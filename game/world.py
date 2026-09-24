@@ -134,7 +134,8 @@ def update_world_lists(game_state, dt):
             game_state["global_rain_tick"] -= DESIGN_RAIN_INTERVAL
             for target in get_targetables(game_state):
                 if target.alive and target.owner_id != game_state["global_rain_owner"]:
-                    target.apply_slow(0.3, 0.3)
+                    if isinstance(target, Character):
+                        target.apply_slow(0.3, 0.3)
                     target.take_damage(DESIGN_RAIN_DAMAGE, source=next((c for c in game_state["characters"] if c.owner_id == game_state["global_rain_owner"]), None), damage_type="design_spell_rain", game_state=game_state)
         if game_state["global_rain_timer"] == 0:
             game_state["global_rain_owner"] = None
