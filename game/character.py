@@ -51,6 +51,9 @@ class Character:
         self.damage_multiplier = 1.0
         self.faction_tag = FACTION_TAGS.get(job_name)
         self.faction_bonus = {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0}
+        self.thunder_mark = 0
+        self.thunder_enhance_timer = 0.0
+        self.thunder_resist_timer = 0.0
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -802,6 +805,8 @@ class Character:
         if self.design_sparrow_fury_timer > 0:
             damage *= 1.0 + SPARROW_FURY_DAMAGE_BONUS
         damage *= 1.0 + self.faction_bonus.get("damage", 0.0)
+        if self.thunder_enhance_timer > 0:
+            damage *= 1.0 + THUNDER_ENHANCE_ATTACK_BONUS
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -1353,6 +1358,11 @@ class Character:
         self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
         self.vel += push * 1.2
         self.update_rect()
+
+    def apply_knockup(self, direction, distance, duration):
+        """击飞：沿方向抛起并短暂失控（击退 + 眩晕的组合硬控）。"""
+        self.apply_knockback(direction, distance)
+        self.apply_stun(duration)
 
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
@@ -2037,8 +2047,12 @@ class Character:
             damage *= self.physical_resistance
             if self.is_windstorm_fox() and self.windstorm_physical_resistance_bonus > 0:
                 damage *= max(0.0, 1.0 - self.windstorm_physical_resistance_bonus)
+            if self.thunder_resist_timer > 0:
+                damage *= max(0.0, 1.0 - THUNDER_SLASH_RESIST_BONUS)
         elif damage_kind == DAMAGE_KIND_SPELL:
             damage *= self.spell_resistance
+            if self.thunder_resist_timer > 0:
+                damage *= max(0.0, 1.0 - THUNDER_SLASH_RESIST_BONUS)
         if self.is_xuanwu() and self.design_shell_stacks > 0 and not is_true_damage:
             damage *= max(0.0, 1.0 - XUANWU_SHELL_DAMAGE_REDUCTION_PER_STACK * self.design_shell_stacks)
         if source_character is not None and source_character.is_tiger() and self.design_tiger_wound > 0 and not is_true_damage:
@@ -3393,6 +3407,10 @@ class Character:
             self.root_timer = max(0.0, self.root_timer - dt)
         if self.design_untargetable_timer > 0:
             self.design_untargetable_timer = max(0.0, self.design_untargetable_timer - dt)
+        if self.thunder_enhance_timer > 0:
+            self.thunder_enhance_timer = max(0.0, self.thunder_enhance_timer - dt)
+        if self.thunder_resist_timer > 0:
+            self.thunder_resist_timer = max(0.0, self.thunder_resist_timer - dt)
         if self.control_immunity_timer > 0:
             self.control_immunity_timer = max(0.0, self.control_immunity_timer - dt)
         if self.equilibrium_mark_timer > 0:

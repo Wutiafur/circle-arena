@@ -875,6 +875,25 @@ KENSHI_FLASH_DAMAGE = 50.0
 KENSHI_FLASH_EXECUTE_MIN_MARK = 2
 KENSHI_FLASH_EXECUTE_RATIO = 0.08
 KENSHI_COLOR = (240, 240, 248)
+# 迅雷剑豪 121 雷之呼吸 / 霹雳一闪 / 六连
+THUNDER_JOB_NAME = "DesignRole121_thunderblade"
+THUNDER_MARK_MAX = 4
+THUNDER_ENHANCE_DURATION = 10.0
+THUNDER_ENHANCE_ATTACK_BONUS = 0.08
+THUNDER_SLASH_DASH = 90.0
+THUNDER_SLASH_DAMAGE = 55.0
+THUNDER_SLASH_HEAL_CHAR = 35.0
+THUNDER_SLASH_HEAL_PROP = 12.0
+THUNDER_SLASH_RESIST_BONUS = 0.3
+THUNDER_SLASH_RESIST_DURATION = 2.0
+THUNDER_SLASH_MARK_DAMAGE_BONUS = 0.08
+THUNDER_SIX_FIRST_DAMAGE = 45.0
+THUNDER_SIX_FINAL_DAMAGE = 70.0
+THUNDER_SIX_FINAL_RADIUS = 90.0
+THUNDER_SIX_EXECUTE_RATIO = 0.06
+THUNDER_SIX_KNOCKUP_DISTANCE = 40.0
+THUNDER_SIX_KNOCKUP_DURATION = 0.6
+THUNDER_COLOR = (238, 212, 108)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3155,6 +3174,13 @@ EFFECT_DATA = {
         "tags": ["控制", "硬控"],
         "sources": ["巨兽", "武僧", "女武神", "多种武器"],
         "description": "目标无法移动、攻击或施法，是最直接的硬控制效果之一。",
+    },
+    "knockup": {
+        "name": "击飞",
+        "category": "negative",
+        "tags": ["控制", "硬控", "位移"],
+        "sources": ["迅雷剑豪", "铁轨狂徒"],
+        "description": "目标被击飞到空中并短暂失控，期间无法移动、攻击或施法，落地后仍会沿击飞方向滑行一段。",
     },
     "freeze": {
         "name": "冻结",

@@ -201,6 +201,7 @@ ROLE_CONFIG_OVERRIDES = {
     118: {"skill_token": "tide_link", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 7.0, "radius_scale": 1.1},
     119: {"skill_token": "blood_feast", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 1.0},
     120: {"skill_token": "kenshi_flash", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 10.0},
+    121: {"skill_token": "thunder_breath", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
 }
 
 

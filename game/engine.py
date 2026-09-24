@@ -4337,6 +4337,64 @@ def cast_design_skill(caster, game_state, token=None):
                     thickness=14.0,
                 ),
             )
+    elif token == "thunder_breath":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        if caster.thunder_enhance_timer > 0:
+            # 第二形态：霹雳一闪·六连（用一次后变回常态）
+            caster.thunder_enhance_timer = 0.0
+            caster.design_untargetable_timer = max(caster.design_untargetable_timer, 1.0)
+            dash_dir = target.pos - caster.pos
+            if dash_dir.length_squared() > 0:
+                dash_dir = dash_dir.normalize()
+                caster.pos = target.pos - dash_dir * (target.radius + caster.radius + 6.0)
+                caster.pos.x = clamp(caster.pos.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+                caster.pos.y = clamp(caster.pos.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+                caster.update_rect()
+            game_state["beam_events"].append(BeamEvent(caster.pos, target.pos, THUNDER_COLOR))
+            knock = target.pos - caster.pos
+            if knock.length_squared() == 0:
+                knock = random_unit_vector()
+            target.apply_knockup(knock, THUNDER_SIX_KNOCKUP_DISTANCE, THUNDER_SIX_KNOCKUP_DURATION)
+            for _ in range(5):
+                target.take_damage(THUNDER_SIX_FIRST_DAMAGE, source=caster, damage_type="design_physical_thunder_six", game_state=game_state)
+            for enemy in enemies:
+                if enemy.alive and (enemy.pos - target.pos).length() <= THUNDER_SIX_FINAL_RADIUS + getattr(enemy, "radius", 0):
+                    final_damage = THUNDER_SIX_FINAL_DAMAGE
+                    if enemy is target:
+                        final_damage += max(0.0, target.max_hp - target.hp) * THUNDER_SIX_EXECUTE_RATIO
+                    enemy.take_damage(final_damage, source=caster, damage_type="design_physical_thunder_lightning", game_state=game_state)
+            spawn_attack_impact(game_state, target.pos, THUNDER_COLOR, radius=THUNDER_SIX_FINAL_RADIUS, thickness=3, burst_count=20)
+            return True
+        # 第一形态：霹雳一闪（三段冲刺，命中叠雷印，满 4 层进入强化）
+        caster.thunder_resist_timer = THUNDER_SLASH_RESIST_DURATION
+        slash_dir = target.pos - caster.pos
+        if slash_dir.length_squared() == 0:
+            slash_dir = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
+        slash_dir = slash_dir.normalize()
+        for _ in range(3):
+            start = pygame.Vector2(caster.pos)
+            end = caster.pos + slash_dir * THUNDER_SLASH_DASH
+            end.x = clamp(end.x, ARENA_RECT.left + caster.radius, ARENA_RECT.right - caster.radius)
+            end.y = clamp(end.y, ARENA_RECT.top + caster.radius, ARENA_RECT.bottom - caster.radius)
+            game_state["beam_events"].append(BeamEvent(start, end, THUNDER_COLOR))
+            for enemy in enemies:
+                if enemy.alive and distance_point_to_segment(enemy.pos, start, end) <= getattr(enemy, "radius", 0) + 16:
+                    mark = min(THUNDER_MARK_MAX, int(getattr(enemy, "thunder_mark", 0)))
+                    slash_damage = THUNDER_SLASH_DAMAGE * (1.0 + mark * THUNDER_SLASH_MARK_DAMAGE_BONUS)
+                    enemy.take_damage(slash_damage, source=caster, damage_type="design_physical_thunder_slash", game_state=game_state)
+                    if isinstance(enemy, Character):
+                        caster.heal(THUNDER_SLASH_HEAL_CHAR)
+                        enemy.thunder_mark = mark + 1
+                        if enemy.thunder_mark >= THUNDER_MARK_MAX:
+                            enemy.thunder_mark = 0
+                            caster.thunder_enhance_timer = max(caster.thunder_enhance_timer, THUNDER_ENHANCE_DURATION)
+                    else:
+                        caster.heal(THUNDER_SLASH_HEAL_PROP)
+            caster.pos = end
+            caster.update_rect()
+        return True
     elif token == "throw_arsenal":
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is not None:
