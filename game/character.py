@@ -49,6 +49,8 @@ class Character:
         self.clone_mode = None
         self.clone_expire_timer = 0.0
         self.damage_multiplier = 1.0
+        self.faction_tag = FACTION_TAGS.get(job_name)
+        self.faction_bonus = {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0}
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -799,6 +801,7 @@ class Character:
             damage *= 1.25
         if self.design_sparrow_fury_timer > 0:
             damage *= 1.0 + SPARROW_FURY_DAMAGE_BONUS
+        damage *= 1.0 + self.faction_bonus.get("damage", 0.0)
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -1201,6 +1204,8 @@ class Character:
             multiplier /= 1.0 + POTION_HASTE_BONUS
         if self.design_wild_brew_timer > 0:
             multiplier /= 1.0 + WILD_BREW_HASTE
+        if self.faction_bonus.get("attack_speed", 0.0) > 0:
+            multiplier /= 1.0 + self.faction_bonus["attack_speed"]
         return max(0.05, multiplier)
 
     def get_basic_attack_cooldown(self):
@@ -2010,6 +2015,8 @@ class Character:
             damage *= 1.0 - GLADIATOR_DAMAGE_REDUCTION
         if self.design_damage_reduction > 0 and not is_true_damage:
             damage *= max(0.0, 1.0 - self.design_damage_reduction)
+        if self.faction_bonus.get("reduction", 0.0) > 0 and not is_true_damage:
+            damage *= max(0.0, 1.0 - self.faction_bonus["reduction"])
         if self.job_name == "Behemoth" and self.behemoth_stone_stacks > 0 and not is_true_damage:
             damage *= max(0.82, 1.0 - self.behemoth_stone_stacks * BEHEMOTH_STONE_DAMAGE_REDUCTION)
         if self.is_paladin() and self.paladin_holy_stacks > 0 and not is_true_damage:
@@ -2388,6 +2395,8 @@ class Character:
         if self.design_spell_haste_timer > 0:
             modifier *= 1.0 + FLAME_DANCER_HASTE_BONUS
         modifier *= max(0.6, 1.0 + self.design_bonus_speed)
+        if self.faction_bonus.get("move_speed", 0.0) > 0:
+            modifier *= 1.0 + self.faction_bonus["move_speed"]
         return modifier
 
     def get_target(self, game_state):

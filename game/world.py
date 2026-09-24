@@ -268,3 +268,34 @@ def draw_world(surface, game_state, label_font):
                         (round(member.pos.x), round(member.pos.y)),
                         2,
                     )
+
+
+def apply_faction_bonuses(game_state):
+    """结算阵营羁绊：同队同阵营存活 ≥2 人一阶、≥3 人二阶，写入每个角色的 faction_bonus。
+
+    死斗战各自为战（owner_id 全不同）时，同队计数恒为 1，羁绊自然不生效。
+    """
+    faction_counts = {}  # owner_id -> {faction: count}
+    for c in game_state["characters"]:
+        if not c.alive:
+            continue
+        tag = getattr(c, "faction_tag", None)
+        if tag:
+            d = faction_counts.setdefault(c.owner_id, {})
+            d[tag] = d.get(tag, 0) + 1
+
+    for c in game_state["characters"]:
+        tag = getattr(c, "faction_tag", None)
+        bonus = {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0}
+        tier = 0
+        if tag and c.alive:
+            count = faction_counts.get(c.owner_id, {}).get(tag, 0)
+            tier_def = FACTION_DEFS.get(tag, {})
+            if count >= 3:
+                bonus = dict(tier_def.get("tier2", bonus))
+                tier = 2
+            elif count >= 2:
+                bonus = dict(tier_def.get("tier1", bonus))
+                tier = 1
+        c.faction_bonus = bonus
+        c.faction_bonus_tier = tier

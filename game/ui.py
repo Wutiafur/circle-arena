@@ -726,9 +726,17 @@ def draw_battle_sidebar(surface, title_font, subtitle_font, body_font, game_stat
         name = truncate_text(get_character_display_name(character), body_font, 100)
         name_surface = body_font.render(name, True, name_color)
         surface.blit(name_surface, (row_rect.left + 34, row_rect.top + 5))
+        cursor_x = row_rect.left + 34 + name_surface.get_width() + 4
         kills = int(getattr(character, "kill_count", 0))
         kill_surface = subtitle_font.render(f"×{kills}", True, (255, 214, 120))
-        surface.blit(kill_surface, (row_rect.left + 34 + name_surface.get_width() + 4, row_rect.top + 7))
+        surface.blit(kill_surface, (cursor_x, row_rect.top + 7))
+        cursor_x += kill_surface.get_width() + 4
+        faction_tag = getattr(character, "faction_tag", None)
+        faction_tier = getattr(character, "faction_bonus_tier", 0)
+        if faction_tag and faction_tier > 0 and character.alive:
+            tier_mark = "Ⅰ" if faction_tier == 1 else "Ⅱ"
+            faction_surface = subtitle_font.render(f"{faction_tag}{tier_mark}", True, (255, 200, 90))
+            surface.blit(faction_surface, (cursor_x, row_rect.top + 7))
 
         value = float(getattr(character, metric, 0.0) or 0.0)
         value_surface = subtitle_font.render(str(int(round(value))), True, accent)

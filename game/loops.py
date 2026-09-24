@@ -1141,6 +1141,7 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             sim_dt = dt * speed_multiplier / steps
             for _ in range(steps):
                 game_state["elapsed_time"] += sim_dt
+                apply_faction_bonuses(game_state)
                 update_weapon_orbs(game_state, sim_dt)
                 living_characters = get_living_characters(game_state)
                 for character in living_characters:

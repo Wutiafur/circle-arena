@@ -3561,3 +3561,74 @@ def get_top_three_jobs(stats=None, min_matches=3):
 def get_battle_job_names():
     names = [job for job in JOB_DEFS.keys() if job not in runtime._DISABLED_ROLE_KEYS]
     return names or list(JOB_DEFS.keys())
+
+
+# ============ 阵营连携（擂台羁绊）============
+# 触发规则：同队（owner_id 相同）同阵营存活 ≥2 人触发一阶、≥3 人触发二阶。
+# 死斗战各自为战（owner_id 全不同），故羁绊仅在擂台/团战生效（与涓灵"仅团队战"同理）。
+FACTION_DEFS = {
+    "四圣": {
+        "tier1": {"damage": 0.05, "reduction": 0.05, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.12, "reduction": 0.12, "attack_speed": 0.0, "move_speed": 0.0},
+    },
+    "雷神": {
+        "tier1": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.15, "move_speed": 0.0},
+        "tier2": {"damage": 0.08, "reduction": 0.0, "attack_speed": 0.30, "move_speed": 0.0},
+    },
+    "亡灵": {
+        "tier1": {"damage": 0.08, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.16, "reduction": 0.06, "attack_speed": 0.0, "move_speed": 0.0},
+    },
+    "野兽": {
+        "tier1": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.06, "move_speed": 0.10},
+        "tier2": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.12, "move_speed": 0.22},
+    },
+    "机械": {
+        "tier1": {"damage": 0.0, "reduction": 0.10, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.06, "reduction": 0.20, "attack_speed": 0.0, "move_speed": 0.0},
+    },
+    "暗影": {
+        "tier1": {"damage": 0.08, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.18, "reduction": 0.0, "attack_speed": 0.08, "move_speed": 0.0},
+    },
+}
+
+FACTION_TAGS = {
+    # 四圣
+    "DesignRole99_phoenix": "四圣",
+    "DesignRole100_xuanwu": "四圣",
+    "DesignRole101_tiger": "四圣",
+    "DesignRole102_azure_dragon": "四圣",
+    # 雷神
+    "DesignRole103_susanoo": "雷神",
+    "DesignRole117_raikiri_blademaster": "雷神",
+    "Electro Trooper": "雷神",
+    # 亡灵
+    "Necromancer": "亡灵",
+    "DesignRole62_lich": "亡灵",
+    "DesignRole52_gravekeeper": "亡灵",
+    "DesignRole104_ghost_priest": "亡灵",
+    "DesignRole109_soulbound_casket": "亡灵",
+    "DesignRole107_mind_thief": "亡灵",
+    # 野兽
+    "DesignRole44_beastmaster": "野兽",
+    "DesignRole116_sparrowhost": "野兽",
+    "DesignRole120_shiro_kenshi": "野兽",
+    "DesignRole59_ranger": "野兽",
+    "Druid": "野兽",
+    "DesignRole110_soul_moth": "野兽",
+    # 机械
+    "Tinkerer": "机械",
+    "Mech Armor": "机械",
+    "DesignRole111_railhog": "机械",
+    "DesignRole81_architect": "机械",
+    "DesignRole65_mechanist": "机械",
+    # 暗影
+    "Assassin": "暗影",
+    "Ninja": "暗影",
+    "DesignRole77_shadow_dancer": "暗影",
+    "DesignRole80_chrono_thief": "暗影",
+    "DesignRole58_voidwalker": "暗影",
+}
+
+FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影"]
