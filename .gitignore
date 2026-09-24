@@ -18,3 +18,7 @@ desktop.ini
 # 临时扫描脚本
 _scan.py
 _scan_out.txt
+
+# 平衡扫描器运行产物
+_balance_report.json
+_balance_report.txt
