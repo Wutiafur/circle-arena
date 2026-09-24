@@ -43,6 +43,29 @@ def get_targetables(game_state):
     return targetables
 
 
+class _TargetableProps:
+    """非角色「可被选为目标」实体（诱饵/召唤物/图腾/旗帜）的宽容属性兜底。
+
+    get_targetables 会混入这些非角色实体，而技能/普攻代码可能访问 Character
+    专属属性（design_* / id），此前会抛 AttributeError 崩溃。这里统一兜底：
+      - id          -> None（表示非角色、无角色编号）
+      - design_*    -> 按后缀返回 None/False/[]/0.0（等效"未施加该状态"）
+    注意：__getattr__ 仅在属性未定义时被调用，不影响真实属性与 take_damage 等方法。
+    """
+    def __getattr__(self, name):
+        if name == "id":
+            return None
+        if not name.startswith("design_"):
+            raise AttributeError(name)
+        if name.endswith(("_owner_id", "_target_id", "_source", "_target")):
+            return None
+        if name.endswith(("_marked", "_flag", "_locked")):
+            return False
+        if name.endswith("_effects"):
+            return []
+        return 0.0
+
+
 def select_nearest_enemy(character, characters):
     nearest = None
     nearest_distance_sq = float("inf")
@@ -944,7 +967,7 @@ class BeamEvent:
         surface.blit(overlay, (0, 0))
 
 
-class Summon:
+class Summon(_TargetableProps):
     def __init__(self, owner, pos, summon_type="basic"):
         self.owner = owner
         self.owner_id = owner.owner_id
@@ -1265,7 +1288,7 @@ class ShieldWall:
         surface.blit(overlay, (0, 0))
 
 
-class Totem:
+class Totem(_TargetableProps):
     def __init__(self, owner, pos):
         self.owner = owner
         self.owner_id = owner.owner_id
@@ -1325,7 +1348,7 @@ class Totem:
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
 
 
-class Banner:
+class Banner(_TargetableProps):
     def __init__(self, owner, pos):
         self.owner = owner
         self.owner_id = owner.owner_id
@@ -2264,7 +2287,7 @@ class DesignEffect:
         surface.blit(overlay, (0, 0))
 
 
-class DesignSummon:
+class DesignSummon(_TargetableProps):
     def __init__(self, owner, summon_type, pos, source_character=None):
         self.owner = owner
         self.owner_id = owner.owner_id
@@ -2364,17 +2387,6 @@ class DesignSummon:
             self.attack_damage_kind = DAMAGE_KIND_PHYSICAL
         self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
         self.update_rect()
-
-    def __getattr__(self, name):
-        if not name.startswith("design_"):
-            raise AttributeError(name)
-        if name.endswith(("_owner_id", "_target_id", "_source", "_target")):
-            return None
-        if name.endswith(("_marked", "_flag", "_locked")):
-            return False
-        if name.endswith("_effects"):
-            return []
-        return 0.0
 
     def update_rect(self):
         self.rect.size = (self.radius * 2, self.radius * 2)
@@ -2925,7 +2937,7 @@ def fire_design_basic_attack(attacker, target, game_state):
     damage = attacker.get_current_basic_damage() * attacker.get_target_attack_bonus(target)
     if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.5:
         damage *= 1.2
-    if role_num == 59 and attacker.design_ranger_lock_timer > 0 and attacker.design_ranger_lock_target_id == target.id:
+    if role_num == 59 and isinstance(target, Character) and attacker.design_ranger_lock_timer > 0 and attacker.design_ranger_lock_target_id == target.id:
         damage *= RANGER_LOCK_DAMAGE_MULTIPLIER
     if role_num == 57:
         damage = random.choice(attacker.config.get("attack_random_values", [damage]))
@@ -4333,7 +4345,7 @@ def cast_design_skill(caster, game_state, token=None):
     return True
 
 
-class Decoy:
+class Decoy(_TargetableProps):
     def __init__(self, owner, pos):
         self.owner = owner
         self.owner_id = owner.owner_id
