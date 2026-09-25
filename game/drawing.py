@@ -238,6 +238,7 @@ def build_pokedex_detail_surface(detail_panel, data, subtitle_font, body_font, s
         (POKEDEX_UI_TEXT["labels"]["attack_range"], str(int(data["attack_range"]))),
         (POKEDEX_UI_TEXT["labels"]["physical_resistance"], f"{data['physical_resistance'] * 100:.0f}%"),
         (POKEDEX_UI_TEXT["labels"]["spell_resistance"], f"{data['spell_resistance'] * 100:.0f}%"),
+        (POKEDEX_UI_TEXT["labels"]["hp_regen"], f"{data['hp_regen']:g} 点/秒"),
         (POKEDEX_UI_TEXT["labels"]["mp_charge"], data["display_mp_charge_style"]),
         (POKEDEX_UI_TEXT["labels"]["skill"], data["display_skill_name"]),
     ]

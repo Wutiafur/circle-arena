@@ -28,6 +28,7 @@ class Character:
         self.max_hp = float(config["max_hp"])
         self.hp = float(config["max_hp"])
         self.mp = 0.0
+        self.hp_regen = float(config.get("hp_regen", 0.5))
         self.pos = pygame.Vector2(pos)
         self.vel = random_unit_vector() * random.uniform(35.0, 75.0)
         self.move_speed = config["move_speed"]
@@ -3988,6 +3989,8 @@ class Character:
     def update(self, dt, game_state):
         if not self.alive:
             return
+
+        self.heal(self.hp_regen * dt)
 
         self.spawn_fx_timer = max(0.0, self.spawn_fx_timer - dt)
         if self.spawn_fx_timer > 0 and game_state is not None and game_state.get("elapsed_time", 0.0) <= SPAWN_FX_DURATION:

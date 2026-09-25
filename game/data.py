@@ -3297,6 +3297,7 @@ POKEDEX_UI_TEXT = {
         "attack_repeat": "连击次数",
         "physical_resistance": "物理抵抗",
         "spell_resistance": "法术抵抗",
+        "hp_regen": "生命回复",
         "mp_charge": "充能方式",
         "skill": "技能名称",
         "passive": "专属被动",
@@ -3337,6 +3338,7 @@ def get_pokedex_data(key):
             0.0,
             float(data.get("spell_resistance", JOB_RESISTANCE_PROFILES.get(key, {}).get("spell_resistance", 1.0))),
         ),
+        "hp_regen": float(job_def.get("hp_regen", 0.5)),
     }
 
 
