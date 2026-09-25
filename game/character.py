@@ -55,6 +55,19 @@ class Character:
         self.thunder_mark = 0
         self.thunder_enhance_timer = 0.0
         self.thunder_resist_timer = 0.0
+        # 座敷童子 122 鬼火资源与技能状态
+        self.soul_fire = 0
+        self.soul_fire_thresholds = set()
+        self.soul_fire_recent_hit_timer = 0.0
+        self.soul_fire_decay_tick = 0.0
+        self.soul_fire_warden_cd = 0.0
+        self.soul_fire_warden_delay = 0.0
+        self.soul_fire_luck_cd = 0.0
+        self.soul_fire_luck_timer = 0.0
+        self.soul_fire_luck_fire_tick = 0.0
+        self.soul_fire_luck_consume_tick = 0.0
+        self.soul_fire_shield = 0.0
+        self.attack_slow_timer = 0.0
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -808,6 +821,12 @@ class Character:
         damage *= 1.0 + self.faction_bonus.get("damage", 0.0)
         if self.thunder_enhance_timer > 0:
             damage *= 1.0 + THUNDER_ENHANCE_ATTACK_BONUS
+        if self.job_name == ZASHIKI_JOB_NAME:
+            if self.soul_fire > 0:
+                lost_ratio = max(0.0, self.max_hp - self.hp) / max(1.0, self.max_hp)
+                damage += self.soul_fire * (ZASHIKI_WARDEN_ATTACK_PER_FIRE + ZASHIKI_WARDEN_ATTACK_LOST_RATIO * lost_ratio)
+            if self.soul_fire_luck_timer > 0:
+                damage *= 1.0 + ZASHIKI_LUCK_DAMAGE_BONUS
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -1212,6 +1231,8 @@ class Character:
             multiplier /= 1.0 + WILD_BREW_HASTE
         if self.faction_bonus.get("attack_speed", 0.0) > 0:
             multiplier /= 1.0 + self.faction_bonus["attack_speed"]
+        if self.attack_slow_timer > 0:
+            multiplier *= 1.0 + ZASHIKI_WARDEN_AS_SLOW
         return max(0.05, multiplier)
 
     def get_basic_attack_cooldown(self):
@@ -1364,6 +1385,80 @@ class Character:
         """击飞：沿方向抛起并短暂失控（击退 + 眩晕的组合硬控）。"""
         self.apply_knockback(direction, distance)
         self.apply_stun(duration)
+
+    def update_soul_fire(self, dt, game_state):
+        """座敷童子：鬼火资源与两个自动冷却技能（宅内厄除/福运昌隆）每帧结算。"""
+        if self.job_name != ZASHIKI_JOB_NAME:
+            return
+        # 特质：生命回复随已损失生命成长（叠加在基础 hp_regen 之上）
+        regen = SOUL_FIRE_REGEN_BASE + SOUL_FIRE_REGEN_LOST_RATIO * max(0.0, self.max_hp - self.hp)
+        self.heal(regen * dt)
+        # 特质：5 秒未受伤害后，鬼火每 1.5 秒消退 1 颗并回血
+        if self.design_recently_hit >= SOUL_FIRE_DECAY_IDLE and self.soul_fire > 0:
+            self.soul_fire_decay_tick += dt
+            while self.soul_fire_decay_tick >= SOUL_FIRE_DECAY_INTERVAL and self.soul_fire > 0:
+                self.soul_fire_decay_tick -= SOUL_FIRE_DECAY_INTERVAL
+                self.soul_fire -= 1
+                self.heal(SOUL_FIRE_DECAY_HEAL_BASE + SOUL_FIRE_DECAY_HEAL_ATTACK_RATIO * self.get_current_basic_damage())
+        else:
+            self.soul_fire_decay_tick = 0.0
+        # 宅内厄除（冷却 10 秒，消耗 3% 当前生命，0.5 秒延迟后 AoE）
+        if self.soul_fire_warden_cd > 0:
+            self.soul_fire_warden_cd = max(0.0, self.soul_fire_warden_cd - dt)
+        if self.soul_fire_warden_delay > 0:
+            self.soul_fire_warden_delay = max(0.0, self.soul_fire_warden_delay - dt)
+            if self.soul_fire_warden_delay == 0.0:
+                self.release_soul_fire_warden(game_state)
+        elif self.soul_fire_warden_cd <= 0.0 and get_targetables(game_state):
+            self.soul_fire_warden_cd = ZASHIKI_WARDEN_CD
+            self.soul_fire_warden_delay = ZASHIKI_WARDEN_DELAY
+            self.take_damage(self.hp * 0.03, source=self, damage_type="true_zashiki_cost", game_state=game_state)
+        # 福运昌隆（冷却 20 秒，消耗 4% 当前生命，福守 4 秒）
+        if self.soul_fire_luck_cd > 0:
+            self.soul_fire_luck_cd = max(0.0, self.soul_fire_luck_cd - dt)
+        if self.soul_fire_luck_timer > 0:
+            self.soul_fire_luck_timer = max(0.0, self.soul_fire_luck_timer - dt)
+            self.soul_fire_luck_fire_tick += dt
+            while self.soul_fire_luck_fire_tick >= ZASHIKI_LUCK_FIRE_INTERVAL:
+                self.soul_fire_luck_fire_tick -= ZASHIKI_LUCK_FIRE_INTERVAL
+                self.soul_fire = min(SOUL_FIRE_MAX, self.soul_fire + 1)
+            self.soul_fire_luck_consume_tick += dt
+            while self.soul_fire_luck_consume_tick >= ZASHIKI_LUCK_CONSUME_INTERVAL:
+                self.soul_fire_luck_consume_tick -= ZASHIKI_LUCK_CONSUME_INTERVAL
+                if self.soul_fire > 0:
+                    self.soul_fire -= 1
+                    self.soul_fire_shield += (
+                        ZASHIKI_LUCK_SHIELD_BASE
+                        + ZASHIKI_LUCK_SHIELD_ATTACK * self.get_current_basic_damage()
+                        + ZASHIKI_LUCK_SHIELD_LOST * max(0.0, self.max_hp - self.hp)
+                    )
+            if self.soul_fire_luck_timer == 0.0:
+                if self.soul_fire_shield > 0:
+                    self.max_hp += self.soul_fire_shield * ZASHIKI_LUCK_SHIELD_CONVERT
+                    self.soul_fire_shield = 0.0
+        elif self.soul_fire_luck_cd <= 0.0:
+            self.soul_fire_luck_cd = ZASHIKI_LUCK_CD
+            self.soul_fire_luck_timer = ZASHIKI_LUCK_DURATION
+            self.soul_fire_luck_fire_tick = 0.0
+            self.soul_fire_luck_consume_tick = 0.0
+            self.soul_fire = min(SOUL_FIRE_MAX, self.soul_fire + 1)
+            self.take_damage(self.hp * 0.04, source=self, damage_type="true_zashiki_cost", game_state=game_state)
+
+    def release_soul_fire_warden(self, game_state):
+        """宅内厄除：半径 50 范围法术伤害，命中角色 +1 鬼火并回血，满 6 颗鬼火时减速+降攻速。"""
+        max_fire = self.soul_fire >= SOUL_FIRE_MAX
+        for enemy in get_targetables(game_state):
+            if enemy.alive and enemy.owner_id != self.owner_id and (enemy.pos - self.pos).length() <= ZASHIKI_WARDEN_RADIUS + getattr(enemy, "radius", 0):
+                lost = max(0.0, self.max_hp - self.hp)
+                dealt = enemy.take_damage(ZASHIKI_WARDEN_DAMAGE_BASE + ZASHIKI_WARDEN_LOST_RATIO * lost, source=self, damage_type="design_spell_zashiki_warden", game_state=game_state)
+                if isinstance(enemy, Character) and dealt > 0:
+                    if max_fire:
+                        enemy.apply_slow(ZASHIKI_WARDEN_SLOW, ZASHIKI_WARDEN_SLOW_DURATION)
+                        enemy.attack_slow_timer = max(enemy.attack_slow_timer, ZASHIKI_WARDEN_AS_SLOW_DURATION)
+                    self.soul_fire = min(SOUL_FIRE_MAX, self.soul_fire + 1)
+                    cap = ZASHIKI_WARDEN_LIFESTEAL_CAP_BASE + ZASHIKI_WARDEN_LIFESTEAL_CAP_ATTACK * self.get_current_basic_damage()
+                    self.heal(min(cap, dealt * ZASHIKI_WARDEN_LIFESTEAL))
+        spawn_attack_impact(game_state, self.pos, ZASHIKI_COLOR, radius=ZASHIKI_WARDEN_RADIUS, thickness=2, burst_count=12)
 
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
@@ -2028,6 +2123,10 @@ class Character:
             damage *= max(0.0, 1.0 - self.design_damage_reduction)
         if self.faction_bonus.get("reduction", 0.0) > 0 and not is_true_damage:
             damage *= max(0.0, 1.0 - self.faction_bonus["reduction"])
+        if self.soul_fire > 0 and not is_true_damage:
+            damage *= max(0.0, 1.0 - self.soul_fire * SOUL_FIRE_REDUCTION_PER)
+        if self.soul_fire_luck_timer > 0 and not is_true_damage:
+            damage *= max(0.0, 1.0 - ZASHIKI_LUCK_RESIST_BONUS)
         if self.job_name == "Behemoth" and self.behemoth_stone_stacks > 0 and not is_true_damage:
             damage *= max(0.82, 1.0 - self.behemoth_stone_stacks * BEHEMOTH_STONE_DAMAGE_REDUCTION)
         if self.is_paladin() and self.paladin_holy_stacks > 0 and not is_true_damage:
@@ -2160,6 +2259,13 @@ class Character:
             self.handle_twin_mirror_lethal()
         self.design_recently_hit = 0.0
         self.design_recent_damage_taken += damage
+        if self.job_name == ZASHIKI_JOB_NAME and damage > 0 and self.hp > 0:
+            lost_pct = (self.max_hp - self.hp) / max(1.0, self.max_hp) * 100.0
+            for threshold in (15, 30, 45, 60, 75, 90):
+                if lost_pct >= threshold and threshold not in self.soul_fire_thresholds:
+                    self.soul_fire_thresholds.add(threshold)
+                    if self.soul_fire < SOUL_FIRE_MAX:
+                        self.soul_fire += 1
         if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
             if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
                 source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
@@ -2412,6 +2518,8 @@ class Character:
         modifier *= max(0.6, 1.0 + self.design_bonus_speed)
         if self.faction_bonus.get("move_speed", 0.0) > 0:
             modifier *= 1.0 + self.faction_bonus["move_speed"]
+        if self.soul_fire_luck_timer > 0:
+            modifier *= 1.0 + ZASHIKI_LUCK_MOVE_BONUS
         return modifier
 
     def get_target(self, game_state):
@@ -3412,6 +3520,8 @@ class Character:
             self.thunder_enhance_timer = max(0.0, self.thunder_enhance_timer - dt)
         if self.thunder_resist_timer > 0:
             self.thunder_resist_timer = max(0.0, self.thunder_resist_timer - dt)
+        if self.attack_slow_timer > 0:
+            self.attack_slow_timer = max(0.0, self.attack_slow_timer - dt)
         if self.control_immunity_timer > 0:
             self.control_immunity_timer = max(0.0, self.control_immunity_timer - dt)
         if self.equilibrium_mark_timer > 0:
@@ -4001,6 +4111,7 @@ class Character:
             self.update_facing(game_state)
             return
 
+        self.update_soul_fire(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)

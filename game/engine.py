@@ -4395,6 +4395,19 @@ def cast_design_skill(caster, game_state, token=None):
             caster.pos = end
             caster.update_rect()
         return True
+    elif token == "zashiki":
+        # 祸福相生：消耗 8% 当前生命，半径 100 AoE，缺失生命越高伤害越高，命中角色 +2 鬼火
+        caster.take_damage(caster.hp * 0.08, source=caster, damage_type="true_zashiki_cost", game_state=game_state)
+        for enemy in enemies:
+            if enemy.alive and (enemy.pos - caster.pos).length() <= ZASHIKI_ULT_RADIUS + getattr(enemy, "radius", 0):
+                base = ZASHIKI_ULT_DAMAGE_BASE + ZASHIKI_ULT_ATTACK_RATIO * caster.get_current_basic_damage() + ZASHIKI_ULT_MAXHP_RATIO * caster.max_hp
+                missing_pct = max(0.0, enemy.max_hp - enemy.hp) / max(1.0, enemy.max_hp) * 100.0
+                execute_bonus = min(ZASHIKI_ULT_EXECUTE_CAP, missing_pct * 0.01)
+                dealt = enemy.take_damage(base * (1.0 + execute_bonus), source=caster, damage_type="design_spell_zashiki_ult", game_state=game_state)
+                if isinstance(enemy, Character) and dealt > 0:
+                    caster.soul_fire = min(SOUL_FIRE_MAX, caster.soul_fire + ZASHIKI_ULT_FIRE_GAIN)
+        spawn_attack_impact(game_state, caster.pos, ZASHIKI_COLOR, radius=ZASHIKI_ULT_RADIUS, thickness=3, burst_count=20)
+        return True
     elif token == "throw_arsenal":
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is not None:
