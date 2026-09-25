@@ -1443,6 +1443,7 @@ class Character:
             self.soul_fire_luck_consume_tick = 0.0
             self.soul_fire = min(SOUL_FIRE_MAX, self.soul_fire + 1)
             self.take_damage(self.hp * 0.04, source=self, damage_type="true_zashiki_cost", game_state=game_state)
+            spawn_attack_impact(game_state, self.pos, ZASHIKI_COLOR, radius=36, thickness=3, lifetime=0.28, burst_count=14)
 
     def release_soul_fire_warden(self, game_state):
         """宅内厄除：半径 50 范围法术伤害，命中角色 +1 鬼火并回血，满 6 颗鬼火时减速+降攻速。"""
@@ -4706,6 +4707,24 @@ class Character:
         if self.design_blood_feast_timer > 0:
             pygame.draw.circle(surface, BLOODSUCKER_COLOR, center, round(self.radius + 9), 2)
             pygame.draw.circle(surface, (120, 20, 30), center, round(self.radius + 5), 1)
+        if self.job_name == ZASHIKI_JOB_NAME:
+            # 鬼火数量特效：身边环绕幽绿色鬼火球，数量 = 当前鬼火数
+            if self.soul_fire > 0:
+                for i in range(self.soul_fire):
+                    angle = math.tau * i / max(1, self.soul_fire) + self.facing_angle
+                    orb_x = center[0] + math.cos(angle) * (self.radius + 13)
+                    orb_y = center[1] + math.sin(angle) * (self.radius + 13)
+                    pygame.draw.circle(surface, ZASHIKI_COLOR, (round(orb_x), round(orb_y)), 4)
+                    pygame.draw.circle(surface, (220, 255, 220), (round(orb_x), round(orb_y)), 4, 1)
+            # 福守状态：绿色光环 + 护盾环
+            if self.soul_fire_luck_timer > 0:
+                pygame.draw.circle(surface, ZASHIKI_COLOR, center, round(self.radius + 9), 2)
+                if self.soul_fire_shield > 0:
+                    pygame.draw.circle(surface, (190, 250, 190), center, round(self.radius + 13), 2)
+            # 宅内厄除蓄力预警环（0.5 秒内逐渐扩亮）
+            if self.soul_fire_warden_delay > 0:
+                progress = 1.0 - self.soul_fire_warden_delay / max(0.01, ZASHIKI_WARDEN_DELAY)
+                pygame.draw.circle(surface, ZASHIKI_COLOR, center, round(ZASHIKI_WARDEN_RADIUS * (0.5 + 0.5 * progress)), 2)
         if self.shield_timer > 0:
             pygame.draw.circle(surface, (120, 180, 255), center, round(self.radius + 6), 2)
         if self.berserker_spin_timer > 0:
