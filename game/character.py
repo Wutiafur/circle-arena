@@ -68,6 +68,7 @@ class Character:
         self.soul_fire_luck_consume_tick = 0.0
         self.soul_fire_shield = 0.0
         self.attack_slow_timer = 0.0
+        self.soul_fire_spin_angle = 0.0
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -1391,6 +1392,7 @@ class Character:
         if self.job_name != ZASHIKI_JOB_NAME:
             return
         # 特质：生命回复随已损失生命成长（叠加在基础 hp_regen 之上）
+        self.soul_fire_spin_angle += 1.5 * dt  # 鬼火独立缓慢公转
         regen = SOUL_FIRE_REGEN_BASE + SOUL_FIRE_REGEN_LOST_RATIO * max(0.0, self.max_hp - self.hp)
         self.heal(regen * dt)
         # 特质：5 秒未受伤害后，鬼火每 1.5 秒消退 1 颗并回血
@@ -4711,7 +4713,7 @@ class Character:
             # 鬼火数量特效：身边环绕幽绿色鬼火球，数量 = 当前鬼火数
             if self.soul_fire > 0:
                 for i in range(self.soul_fire):
-                    angle = math.tau * i / max(1, self.soul_fire) + self.facing_angle
+                    angle = math.tau * i / max(1, self.soul_fire) + self.soul_fire_spin_angle
                     orb_x = center[0] + math.cos(angle) * (self.radius + 13)
                     orb_y = center[1] + math.sin(angle) * (self.radius + 13)
                     pygame.draw.circle(surface, ZASHIKI_COLOR, (round(orb_x), round(orb_y)), 4)
