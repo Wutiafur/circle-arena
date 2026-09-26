@@ -532,6 +532,15 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
     TEAM_MAX = 8
     RED_COLOR = (224, 84, 76)
     BLUE_COLOR = (96, 160, 255)
+    # 滑动条几何：红/蓝列表右侧各一条
+    visible_rows = list_h // row_h
+    total_rows = len(ordered_names)
+    max_scroll = max(0, total_rows - visible_rows)
+    bar_left = {"red": 36 + 352, "blue": 424 + 352}
+    bar_width = 8
+    thumb_h = max(26, round(list_h * visible_rows / max(1, total_rows)))
+    dragging_side = None
+    dragging_thumb_offset = 0.0
 
     def visible_names(key):
         start = scroll[key]
@@ -575,6 +584,23 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
                         prep["red"],
                         prep["blue"],
                     )
+                # 滑动条交互：拖动滑块 / 点击轨道跳转
+                if max_scroll > 0:
+                    thumb_y_now = {
+                        s: list_top + round((scroll[s] / max_scroll) * (list_h - thumb_h))
+                        for s in ("red", "blue")
+                    }
+                    for side in ("red", "blue"):
+                        track_rect = pygame.Rect(bar_left[side], list_top, bar_width, list_h)
+                        if track_rect.collidepoint(mapped_pos):
+                            thumb_rect = pygame.Rect(bar_left[side], thumb_y_now[side], bar_width, thumb_h)
+                            if thumb_rect.collidepoint(mapped_pos):
+                                dragging_side = side
+                                dragging_thumb_offset = mapped_pos[1] - thumb_rect.top
+                            else:
+                                ratio = (mapped_pos[1] - list_top - thumb_h / 2) / max(1, list_h - thumb_h)
+                                scroll[side] = int(clamp(round(ratio * max_scroll), 0, max_scroll))
+                            break
                 for side in ("red", "blue"):
                     for name, rect in row_rects[side].items():
                         if rect.collidepoint(mapped_pos):
@@ -583,6 +609,13 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
                             elif len(selection[side]) < TEAM_MAX:
                                 selection[side].add(name)
                             break
+            if event.type == pygame.MOUSEMOTION and dragging_side is not None:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is not None and max_scroll > 0:
+                    ratio = (mapped_pos[1] - list_top - dragging_thumb_offset) / max(1, list_h - thumb_h)
+                    scroll[dragging_side] = int(clamp(round(ratio * max_scroll), 0, max_scroll))
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                dragging_side = None
             if event.type == pygame.MOUSEWHEEL:
                 hover_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
                 for side, left in (("red", 36), ("blue", 424)):
@@ -600,7 +633,7 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
             pygame.draw.line(canvas, (22, 28, 36), (0, gy), (SCREEN_WIDTH, gy), 1)
         title = title_font.render("红蓝擂台赛：红队 vs 蓝队（每队 1~8 人）", True, TEXT_COLOR)
         canvas.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 62)))
-        hint = subtitle_font.render("点击角色加入/移出队伍 · 滚轮滚动 · Esc 返回", True, (150, 164, 180))
+        hint = subtitle_font.render("点击角色加入/移出队伍 · 滚轮或拖动滑动条滚动 · Esc 返回", True, (150, 164, 180))
         canvas.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 98)))
 
         for side, left, team_color, side_title in (
@@ -625,6 +658,13 @@ def duel_loop(screen, clock, title_font, subtitle_font, body_font, button_font):
                 if selected:
                     mark = button_font.render("✔", True, team_color)
                     canvas.blit(mark, mark.get_rect(center=(rect.right - 20, rect.centery)))
+            # 滑动条：轨道 + 滑块
+            bar_track = pygame.Rect(bar_left[side], list_top, bar_width, list_h)
+            pygame.draw.rect(canvas, (30, 38, 48), bar_track, border_radius=4)
+            thumb_y = list_top + round((scroll[side] / max_scroll) * (list_h - thumb_h)) if max_scroll > 0 else list_top
+            thumb_rect = pygame.Rect(bar_left[side], thumb_y, bar_width, thumb_h)
+            thumb_color = team_color if dragging_side == side else (110, 130, 150)
+            pygame.draw.rect(canvas, thumb_color, thumb_rect, border_radius=4)
 
         red_count, blue_count = len(selection["red"]), len(selection["blue"])
         ready = red_count >= 1 and blue_count >= 1
