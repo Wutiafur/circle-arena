@@ -10,6 +10,7 @@ import pygame
 from game.data import *
 from game.engine import *
 from game.ui import *
+from game.world import *
 from game import runtime
 
 
