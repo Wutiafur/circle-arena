@@ -203,6 +203,7 @@ ROLE_CONFIG_OVERRIDES = {
     120: {"skill_token": "kenshi_flash", "basic_damage_kind": "physical", "mp_mode": "damage_dealt_scaled", "mp_rate": 12.0 / 10.0},
     121: {"skill_token": "thunder_breath", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
     122: {"skill_token": "zashiki", "basic_damage_kind": "spell", "mp_mode": "damage_dealt_scaled", "mp_rate": 8.0 / 10.0},
+    123: {"skill_token": "envy_priest", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
 }
 
 

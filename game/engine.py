@@ -4396,6 +4396,19 @@ def cast_design_skill(caster, game_state, token=None):
             caster.pos = end
             caster.update_rect()
         return True
+    elif token == "envy_priest":
+        if caster.anger >= ENVY_ANGER_MAX:
+            # 清算：消耗全部怒火，蓄力 5 秒（蓄力期间受伤 -40% 在 take_damage 处理）
+            caster.anger = 0
+            caster.envy_cast_type = "liquidation"
+            caster.envy_charge_timer = ENVY_LIQUIDATION_CHARGE
+        else:
+            # 尝尝这个：蓄力 3 秒，记录面朝方向
+            direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
+            caster.envy_cast_type = "flash"
+            caster.envy_charge_timer = ENVY_FLASH_CHARGE
+            caster.envy_cast_dir = direction.normalize()
+        return True
     elif token == "zashiki":
         # 祸福相生：消耗 8% 当前生命，半径 100 AoE，缺失生命越高伤害越高，命中角色 +2 鬼火
         caster.take_damage(caster.hp * 0.08, source=caster, damage_type="true_zashiki_cost", game_state=game_state)

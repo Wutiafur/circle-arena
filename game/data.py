@@ -937,6 +937,26 @@ ZASHIKI_ULT_MAXHP_RATIO = 0.1
 ZASHIKI_ULT_EXECUTE_CAP = 0.4
 ZASHIKI_ULT_FIRE_GAIN = 2
 ZASHIKI_COLOR = (120, 220, 120)
+# 嫉妒司教 123 怒火 / 记录本 / 反击 / 主动
+ENVY_JOB_NAME = "DesignRole123_envy_priest"
+ENVY_ANGER_MAX = 100
+ENVY_ANGER_REDUCTION_PER = 0.002
+ENVY_NOTEBOOK_MAX = 25
+ENVY_NOTEBOOK_DAMAGE_PER = 1.0
+ENVY_GAIN_BONUS = 1
+ENVY_COUNTER_CD = 12.0
+ENVY_COUNTER_BASE_MULT = 2.0
+ENVY_FLASH_CHARGE = 3.0
+ENVY_FLASH_HALF_ANGLE = 15.0
+ENVY_FLASH_RADIUS = 60.0
+ENVY_FLASH_DAMAGE_MULT = 5.0
+ENVY_LIQUIDATION_CHARGE = 5.0
+ENVY_LIQUIDATION_REDUCTION = 0.40
+ENVY_LIQUIDATION_DAMAGE_MULT = 4.0
+ENVY_LIQUIDATION_AOE_DAMAGE = 50.0
+ENVY_LIQUIDATION_AOE_RADIUS = 60.0
+ENVY_LIQUIDATION_SELF_LOSS = 0.20
+ENVY_COLOR = (96, 72, 146)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
 KILLSTREAK_GAIN_THRESHOLDS = {3: 1, 5: 2, 8: 3}
 KILLSTREAK_GAIN_DURATION = 6.0
@@ -3662,6 +3682,10 @@ FACTION_DEFS = {
         "tier1": {"damage": 0.08, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
         "tier2": {"damage": 0.18, "reduction": 0.0, "attack_speed": 0.08, "move_speed": 0.0},
     },
+    "嫉妒": {
+        "tier1": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.0, "reduction": 0.20, "attack_speed": 0.0, "move_speed": 0.0},
+    },
 }
 
 FACTION_TAGS = {
@@ -3700,6 +3724,8 @@ FACTION_TAGS = {
     "DesignRole77_shadow_dancer": "暗影",
     "DesignRole80_chrono_thief": "暗影",
     "DesignRole58_voidwalker": "暗影",
+    # 嫉妒（后续补充更多嫉妒角色以激活 3 人减伤）
+    "DesignRole123_envy_priest": "嫉妒",
 }
 
-FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影"]
+FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影", "嫉妒"]

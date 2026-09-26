@@ -69,6 +69,13 @@ class Character:
         self.soul_fire_shield = 0.0
         self.attack_slow_timer = 0.0
         self.soul_fire_spin_angle = 0.0
+        # 嫉妒司教 123 怒火 / 记录本 / 反击 / 蓄力
+        self.anger = 0
+        self.envy_notebook = 0
+        self.envy_charge_timer = 0.0
+        self.envy_cast_type = None
+        self.envy_counter_cd = 0.0
+        self.envy_cast_dir = pygame.Vector2(1, 0)
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -1463,6 +1470,60 @@ class Character:
                     self.heal(min(cap, dealt * ZASHIKI_WARDEN_LIFESTEAL))
         spawn_attack_impact(game_state, self.pos, ZASHIKI_COLOR, radius=ZASHIKI_WARDEN_RADIUS, thickness=2, burst_count=12)
 
+    def update_envy_cast(self, dt, game_state):
+        """嫉妒司教：反击冷却递减 + 主动蓄力计时与释放。"""
+        if self.job_name != ENVY_JOB_NAME:
+            return
+        if self.envy_counter_cd > 0:
+            self.envy_counter_cd = max(0.0, self.envy_counter_cd - dt)
+        if self.envy_charge_timer > 0:
+            self.envy_charge_timer = max(0.0, self.envy_charge_timer - dt)
+            if self.envy_charge_timer == 0.0:
+                cast_type = self.envy_cast_type
+                self.envy_cast_type = None
+                if cast_type == "flash":
+                    self.release_envy_flash(game_state)
+                elif cast_type == "liquidation":
+                    self.release_envy_liquidation(game_state)
+
+    def release_envy_flash(self, game_state):
+        """尝尝这个：蓄力完成，面前 30° 半径 60 范围造成 5×普攻伤害。"""
+        direction = self.envy_cast_dir
+        if direction.length_squared() == 0:
+            direction = random_unit_vector()
+        targets = collect_targets_in_cone(self.pos, direction, ENVY_FLASH_RADIUS, ENVY_FLASH_HALF_ANGLE, self.owner_id, game_state)
+        damage = ENVY_FLASH_DAMAGE_MULT * self.get_current_basic_damage()
+        for target in targets:
+            if target.alive:
+                target.take_damage(damage, source=self, damage_type="design_physical_envy_flash", game_state=game_state)
+        spawn_attack_impact(game_state, self.pos, ENVY_COLOR, radius=ENVY_FLASH_RADIUS, thickness=3, burst_count=16)
+
+    def release_envy_liquidation(self, game_state):
+        """清算：撞向记录本最多敌人，命中 4×(普攻+记录本) 物伤 + 半径60 AoE，之后自损 20% 最大生命。"""
+        target = None
+        best = -1
+        for enemy in get_targetables(game_state):
+            if enemy.alive and enemy.owner_id != self.owner_id:
+                nb = int(getattr(enemy, "envy_notebook", 0))
+                if nb > best:
+                    best = nb
+                    target = enemy
+        if target is not None:
+            dash_dir = target.pos - self.pos
+            if dash_dir.length_squared() > 0:
+                dash_dir = dash_dir.normalize()
+                self.pos = target.pos - dash_dir * (target.radius + self.radius + 4)
+                self.pos.x = clamp(self.pos.x, ARENA_RECT.left + self.radius, ARENA_RECT.right - self.radius)
+                self.pos.y = clamp(self.pos.y, ARENA_RECT.top + self.radius, ARENA_RECT.bottom - self.radius)
+                self.update_rect()
+            hit_damage = ENVY_LIQUIDATION_DAMAGE_MULT * (self.get_current_basic_damage() + max(0, best))
+            target.take_damage(hit_damage, source=self, damage_type="design_physical_envy_liquidation", game_state=game_state)
+            for enemy in get_targetables(game_state):
+                if enemy.alive and enemy.owner_id != self.owner_id and (enemy.pos - target.pos).length() <= ENVY_LIQUIDATION_AOE_RADIUS + getattr(enemy, "radius", 0):
+                    enemy.take_damage(ENVY_LIQUIDATION_AOE_DAMAGE, source=self, damage_type="design_physical_envy_liquidation_aoe", game_state=game_state)
+        self.take_damage(self.max_hp * ENVY_LIQUIDATION_SELF_LOSS, source=self, damage_type="true_zashiki_cost", game_state=game_state)
+        spawn_attack_impact(game_state, self.pos, ENVY_COLOR, radius=ENVY_LIQUIDATION_AOE_RADIUS, thickness=4, burst_count=24)
+
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
             return
@@ -2130,6 +2191,10 @@ class Character:
             damage *= max(0.0, 1.0 - self.soul_fire * SOUL_FIRE_REDUCTION_PER)
         if self.soul_fire_luck_timer > 0 and not is_true_damage:
             damage *= max(0.0, 1.0 - ZASHIKI_LUCK_RESIST_BONUS)
+        if self.job_name == ENVY_JOB_NAME and self.anger > 0 and not is_true_damage:
+            damage *= max(0.0, 1.0 - self.anger * ENVY_ANGER_REDUCTION_PER)
+        if self.job_name == ENVY_JOB_NAME and self.envy_cast_type == "liquidation" and self.envy_charge_timer > 0 and not is_true_damage:
+            damage *= 1.0 - ENVY_LIQUIDATION_REDUCTION
         if self.job_name == "Behemoth" and self.behemoth_stone_stacks > 0 and not is_true_damage:
             damage *= max(0.82, 1.0 - self.behemoth_stone_stacks * BEHEMOTH_STONE_DAMAGE_REDUCTION)
         if self.is_paladin() and self.paladin_holy_stacks > 0 and not is_true_damage:
@@ -2190,6 +2255,9 @@ class Character:
                 damage *= 1.0 + GAZE_TRUE_BONUS_PER_STACK * min(GAZE_MAX, self.design_gaze)
             elif (self.pos - source_character.pos).length_squared() > 1.0:
                 damage *= 1.0 + GAZE_MOVE_BONUS_PER_STACK * min(GAZE_MAX, self.design_gaze)
+        # 嫉妒司教：嫉妒阵营角色对带【记录本】目标的伤害 +层数（每层+1）
+        if source_character is not None and getattr(source_character, "faction_tag", None) == "嫉妒" and getattr(self, "envy_notebook", 0) > 0 and not is_true_damage:
+            damage += self.envy_notebook * ENVY_NOTEBOOK_DAMAGE_PER
         if self.design_stolen_marks > 0 and not is_true_damage:
             damage *= 1.0 - STOLEN_PASSIVE_DAMAGE_BONUS_PER_STACK * min(STOLEN_MARK_MAX, self.design_stolen_marks)
         if self.job_name == MIND_THIEF_JOB and source_character is not None and int(getattr(source_character, "design_stolen_marks", 0)) > 0 and not is_true_damage:
@@ -2269,6 +2337,21 @@ class Character:
                     self.soul_fire_thresholds.add(threshold)
                     if self.soul_fire < SOUL_FIRE_MAX:
                         self.soul_fire += 1
+        # 嫉妒司教：受击怒火+1(同方嫉妒+1) + 来源叠记录本 + 攻击范围内反击
+        if self.job_name == ENVY_JOB_NAME and damage > 0 and self.hp > 0:
+            self.anger = min(ENVY_ANGER_MAX, self.anger + 1 + ENVY_GAIN_BONUS)
+            if source_character is not None and source_character is not self and source_character.alive:
+                source_character.envy_notebook = min(ENVY_NOTEBOOK_MAX, getattr(source_character, "envy_notebook", 0) + 1)
+            if (
+                self.envy_counter_cd <= 0
+                and source_character is not None
+                and source_character is not self
+                and source_character.alive
+                and (source_character.pos - self.pos).length() <= self.get_current_attack_range()
+            ):
+                self.envy_counter_cd = ENVY_COUNTER_CD
+                counter_damage = ENVY_COUNTER_BASE_MULT * self.get_current_basic_damage() + self.anger * 1.0
+                source_character.take_damage(counter_damage, source=self, damage_type="design_physical_envy_counter", game_state=game_state)
         if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
             if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
                 source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
@@ -4115,6 +4198,7 @@ class Character:
             return
 
         self.update_soul_fire(dt, game_state)
+        self.update_envy_cast(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)
