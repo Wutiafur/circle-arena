@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,6 +6,7 @@ __pycache__/
 
 # 运行时自动生成的崩溃报告（bug/ 下的手动归档保留）
 bug/crash_*.txt
+bug/finish/crash_*.txt
 
 # 本地用户设置（每台机器不同，不入库）
 settings.json
