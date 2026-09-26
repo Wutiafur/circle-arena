@@ -10,6 +10,7 @@ import pygame
 
 from game.data import *
 from game.utils import *
+from game.drawing import *
 from game.character import Character
 
 def get_living_characters(game_state):
