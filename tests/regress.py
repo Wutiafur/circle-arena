@@ -94,6 +94,10 @@ def run_render_smoke():
     small = game.create_ui_font(16)
     title = game.create_ui_font(24, bold=True)
     scene = pygame.Surface((game.SCREEN_WIDTH, game.SCREEN_HEIGHT))
+    # 覆盖弹丸绘制路径（曾因漏导入 draw_shape_icon 崩溃）
+    if state["characters"]:
+        src = state["characters"][0]
+        state["projectiles"].append(game.Projectile(src.pos, pygame.Vector2(200, 0), src, 15.0, (255, 255, 255), source_kind="basic"))
     game.draw_grid(scene)
     game.draw_ui(scene, title, small, state)
     game.draw_world(scene, state, small)
