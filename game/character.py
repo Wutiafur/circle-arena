@@ -1624,13 +1624,8 @@ class Character:
                 lowest.envy_fortress = True
 
     def gain_prelate_resentment(self, amount, game_state):
-        """嫉妒主教：获得嫉妒-仇怨，当前攻击目标带【报复对象】时额外 +1。"""
-        bonus = 0
-        if game_state is not None and self.prelate_revenge_target_id is not None:
-            target = self.get_target(game_state)
-            if target is not None and target.id == self.prelate_revenge_target_id:
-                bonus = 1
-        self.prelate_resentment = min(PRELATE_RESENTMENT_MAX, self.prelate_resentment + amount + bonus)
+        """嫉妒主教：获得嫉妒-仇怨（上限 10 层）。"""
+        self.prelate_resentment = min(PRELATE_RESENTMENT_MAX, self.prelate_resentment + amount)
 
     def gain_prelate_elder_from_resentment(self):
         """每消耗 10 层嫉妒-仇怨 → 1 层长姊纹身。"""
@@ -1709,6 +1704,8 @@ class Character:
             if enemies:
                 worst = max(enemies, key=lambda e: max(0.0, float(getattr(e, "envy_harm", 0.0))))
                 self.prelate_revenge_target_id = worst.id
+                # 被动1-3：满足第1条选择目标（选出报复对象）时，额外获得 1 层【嫉妒-仇怨】（不消耗资源）
+                self.prelate_resentment = min(PRELATE_RESENTMENT_MAX, self.prelate_resentment + 1)
             envy_allies = sum(1 for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id and getattr(c, "faction_tag", None) == "嫉妒")
             self.gain_prelate_resentment(envy_allies, game_state)
         if self.prelate_exe_charge > 0:
