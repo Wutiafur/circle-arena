@@ -76,6 +76,15 @@ class Character:
         self.envy_cast_type = None
         self.envy_counter_cd = 0.0
         self.envy_cast_dir = pygame.Vector2(1, 0)
+        # 忠印卫士 124 嫉妒纹身 / 报复对象 / 保护（部分字段所有角色共用）
+        self.envy_tattoo_hits = 0
+        self.envy_harm = 0.0
+        self.envy_blessing_timer = 0.0
+        self.loyal_revenge_cd = 0.0
+        self.loyal_revenge_target_id = None
+        self.loyal_ledger_timer = 0.0
+        self.loyal_tattoo_stacks = 0
+        self.loyal_protect_counter = 0
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -835,6 +844,10 @@ class Character:
                 damage += self.soul_fire * (ZASHIKI_WARDEN_ATTACK_PER_FIRE + ZASHIKI_WARDEN_ATTACK_LOST_RATIO * lost_ratio)
             if self.soul_fire_luck_timer > 0:
                 damage *= 1.0 + ZASHIKI_LUCK_DAMAGE_BONUS
+        if self.job_name == LOYAL_JOB_NAME and self.loyal_tattoo_stacks > 0:
+            damage *= 1.0 + LOYAL_TATTOO_DAMAGE_PER * self.loyal_tattoo_stacks
+        if self.envy_blessing_timer > 0:
+            damage *= 1.0 + LOYAL_PROTECT_DAMAGE
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -1523,6 +1536,41 @@ class Character:
                     enemy.take_damage(ENVY_LIQUIDATION_AOE_DAMAGE, source=self, damage_type="design_physical_envy_liquidation_aoe", game_state=game_state)
         self.take_damage(self.max_hp * ENVY_LIQUIDATION_SELF_LOSS, source=self, damage_type="true_zashiki_cost", game_state=game_state)
         spawn_attack_impact(game_state, self.pos, ENVY_COLOR, radius=ENVY_LIQUIDATION_AOE_RADIUS, thickness=4, burst_count=24)
+
+    def update_loyal_guard(self, dt, game_state):
+        """忠印卫士：纹身层数 / 报复对象刷新 / 保护触发 / 反击冷却。"""
+        if self.job_name != LOYAL_JOB_NAME:
+            return
+        if self.loyal_revenge_cd > 0:
+            self.loyal_revenge_cd = max(0.0, self.loyal_revenge_cd - dt)
+        if game_state is None:
+            return
+        allies_all = [c for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id]
+        if not allies_all:
+            return
+        # 纹身：友方嫉妒单位受击计数合计，每 3 次叠 1 层（上限 5 层）
+        envy_allies = [c for c in allies_all if getattr(c, "faction_tag", None) == "嫉妒"]
+        self.loyal_tattoo_stacks = min(
+            LOYAL_TATTOO_MAX,
+            sum(getattr(c, "envy_tattoo_hits", 0) for c in envy_allies) // LOYAL_TATTOO_HITS_PER_STACK,
+        )
+        # 报复对象：每秒刷新，标记对友方造成最多伤害的敌人
+        self.loyal_ledger_timer += dt
+        if self.loyal_ledger_timer >= LOYAL_REVENGE_REFRESH:
+            self.loyal_ledger_timer -= LOYAL_REVENGE_REFRESH
+            enemies = [c for c in game_state["characters"] if c.alive and c.owner_id != self.owner_id]
+            if enemies:
+                worst = max(enemies, key=lambda e: max(0.0, float(getattr(e, "envy_harm", 0.0))))
+                self.loyal_revenge_target_id = worst.id
+        # 保护：除体力上限最低友方外的友方，累计受击每 8 次 → 给最低者伤害 +30% 持续 1.2 秒
+        allies = [c for c in allies_all if c.job_name != LOYAL_JOB_NAME]
+        if allies:
+            lowest = min(allies, key=lambda c: c.max_hp)
+            others_hits = sum(getattr(c, "envy_tattoo_hits", 0) for c in allies if c is not lowest)
+            triggered_now = others_hits // LOYAL_PROTECT_HITS
+            if triggered_now > self.loyal_protect_counter:
+                self.loyal_protect_counter = triggered_now
+                lowest.envy_blessing_timer = LOYAL_PROTECT_DURATION
 
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
@@ -2258,6 +2306,15 @@ class Character:
         # 嫉妒司教：嫉妒阵营角色对带【记录本】目标的伤害 +层数（每层+1）
         if source_character is not None and getattr(source_character, "faction_tag", None) == "嫉妒" and getattr(self, "envy_notebook", 0) > 0 and not is_true_damage:
             damage += self.envy_notebook * ENVY_NOTEBOOK_DAMAGE_PER
+        # 忠印卫士：对该角色的技能伤害 +20%（仅当此角色是它的【报复对象】）
+        if (
+            source_character is not None
+            and source_character.job_name == LOYAL_JOB_NAME
+            and source_character.loyal_revenge_target_id == self.id
+            and str(damage_type).startswith("design_")
+            and not is_true_damage
+        ):
+            damage *= 1.0 + LOYAL_REVENGE_SKILL_BONUS
         if self.design_stolen_marks > 0 and not is_true_damage:
             damage *= 1.0 - STOLEN_PASSIVE_DAMAGE_BONUS_PER_STACK * min(STOLEN_MARK_MAX, self.design_stolen_marks)
         if self.job_name == MIND_THIEF_JOB and source_character is not None and int(getattr(source_character, "design_stolen_marks", 0)) > 0 and not is_true_damage:
@@ -2352,6 +2409,37 @@ class Character:
                 self.envy_counter_cd = ENVY_COUNTER_CD
                 counter_damage = ENVY_COUNTER_BASE_MULT * self.get_current_basic_damage() + self.anger * 1.0
                 source_character.take_damage(counter_damage, source=self, damage_type="design_physical_envy_counter", game_state=game_state)
+        # 忠印卫士：受击计数 + 报复伤害账本 + 报复反击
+        if damage > 0 and self.hp > 0:
+            self.envy_tattoo_hits += 1
+            loyal_guard = None
+            if game_state is not None:
+                for c in game_state["characters"]:
+                    if c.job_name == LOYAL_JOB_NAME and c.owner_id == self.owner_id:
+                        loyal_guard = c
+                        break
+            if (
+                loyal_guard is not None
+                and source_character is not None
+                and source_character is not self
+                and source_character.owner_id != self.owner_id
+                and source_character.alive
+            ):
+                source_character.envy_harm += damage
+            if (
+                self.job_name == LOYAL_JOB_NAME
+                and self.loyal_revenge_cd <= 0
+                and source_character is not None
+                and source_character is not self
+                and source_character.owner_id != self.owner_id
+                and source_character.alive
+                and (source_character.pos - self.pos).length() <= self.get_current_attack_range()
+            ):
+                self.loyal_revenge_cd = LOYAL_COUNTER_CD
+                counter_damage = LOYAL_COUNTER_MULT * self.get_current_basic_damage()
+                source_character.take_damage(counter_damage, source=self, damage_type="design_physical_loyal_counter", game_state=game_state)
+                if isinstance(source_character, Character):
+                    source_character.apply_bleed(LOYAL_COUNTER_BLEED)
         if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
             if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
                 source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
@@ -3608,6 +3696,8 @@ class Character:
             self.thunder_resist_timer = max(0.0, self.thunder_resist_timer - dt)
         if self.attack_slow_timer > 0:
             self.attack_slow_timer = max(0.0, self.attack_slow_timer - dt)
+        if self.envy_blessing_timer > 0:
+            self.envy_blessing_timer = max(0.0, self.envy_blessing_timer - dt)
         if self.control_immunity_timer > 0:
             self.control_immunity_timer = max(0.0, self.control_immunity_timer - dt)
         if self.equilibrium_mark_timer > 0:
@@ -4199,6 +4289,7 @@ class Character:
 
         self.update_soul_fire(dt, game_state)
         self.update_envy_cast(dt, game_state)
+        self.update_loyal_guard(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)

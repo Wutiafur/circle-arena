@@ -4396,6 +4396,16 @@ def cast_design_skill(caster, game_state, token=None):
             caster.pos = end
             caster.update_rect()
         return True
+    elif token == "loyal_vanguard":
+        # 忠义的证明：对最近敌人造成 40+1×普攻 物理伤害并眩晕 3 秒
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is not None:
+            ult_damage = LOYAL_ULT_DAMAGE_BASE + LOYAL_ULT_ATTACK * caster.get_current_basic_damage()
+            target.take_damage(ult_damage, source=caster, damage_type="design_physical_loyal_ult", game_state=game_state)
+            if isinstance(target, Character):
+                target.apply_stun(LOYAL_ULT_STUN)
+            spawn_attack_impact(game_state, target.pos, LOYAL_COLOR, radius=16, thickness=3, burst_count=12)
+        return True
     elif token == "envy_priest":
         if caster.anger >= ENVY_ANGER_MAX:
             # 清算：消耗全部怒火，蓄力 5 秒（蓄力期间受伤 -40% 在 take_damage 处理）
