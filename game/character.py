@@ -85,6 +85,14 @@ class Character:
         self.loyal_ledger_timer = 0.0
         self.loyal_tattoo_stacks = 0
         self.loyal_protect_counter = 0
+        # 怨仇刃卫 125 复仇对象 / 复仇记录 / 反击形态（部分字段通用）
+        self.envy_grudge = 0
+        self.grudge_memories = 0
+        self.envy_fortress = False
+        self.grudge_self_timer = 0.0
+        self.grudge_ally_timer = 0.0
+        self.grudge_spree_cd = 0.0
+        self.grudge_fortress_done = False
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -1572,6 +1580,23 @@ class Character:
                 self.loyal_protect_counter = triggered_now
                 lowest.envy_blessing_timer = LOYAL_PROTECT_DURATION
 
+    def update_grudge_blade(self, dt, game_state):
+        """怨仇刃卫：复仇对象/反击计时器递减 + 开场给体力比例最低友方常驻 -10% 减伤。"""
+        if self.job_name != GRUDGE_JOB_NAME:
+            return
+        if self.grudge_self_timer > 0:
+            self.grudge_self_timer = max(0.0, self.grudge_self_timer - dt)
+        if self.grudge_ally_timer > 0:
+            self.grudge_ally_timer = max(0.0, self.grudge_ally_timer - dt)
+        if self.grudge_spree_cd > 0:
+            self.grudge_spree_cd = max(0.0, self.grudge_spree_cd - dt)
+        if not self.grudge_fortress_done and game_state is not None:
+            self.grudge_fortress_done = True
+            allies = [c for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id]
+            if allies:
+                lowest = min(allies, key=lambda c: (c.hp / max(1.0, c.max_hp), c.max_hp))
+                lowest.envy_fortress = True
+
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
             return
@@ -2091,6 +2116,8 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
+        if getattr(self, "envy_fortress", False) and damage > 0:
+            damage *= 1.0 - GRUDGE_FORT_REDUCTION
         if self.design_tide_link_active and not self._tide_share and damage > 0 and game_state is not None:
             members = [m for m in game_state.get("characters", []) if m.alive and getattr(m, "design_tide_link_active", False)]
             if len(members) >= 2:
@@ -2440,6 +2467,58 @@ class Character:
                 source_character.take_damage(counter_damage, source=self, damage_type="design_physical_loyal_counter", game_state=game_state)
                 if isinstance(source_character, Character):
                     source_character.apply_bleed(LOYAL_COUNTER_BLEED)
+        # 怨仇刃卫：复仇对象消耗 + 施加 + 双形态反击（嫉妒≥3铭刻于心 / <3大闹一场）
+        if damage > 0 and self.hp > 0:
+            if source_character is not None and source_character.job_name == GRUDGE_JOB_NAME and getattr(self, "envy_grudge", 0) > 0:
+                dt_str = str(damage_type)
+                if "basic" in dt_str or "grudge_counter" in dt_str:
+                    consumed = int(getattr(self, "envy_grudge", 0))
+                    self.envy_grudge = 0
+                    self.envy_notebook = min(ENVY_NOTEBOOK_MAX, getattr(self, "envy_notebook", 0) + consumed)
+                    source_character.grudge_memories = getattr(source_character, "grudge_memories", 0) + consumed
+            grudge_blade = None
+            if game_state is not None:
+                for c in game_state["characters"]:
+                    if c.job_name == GRUDGE_JOB_NAME and c.owner_id == self.owner_id:
+                        grudge_blade = c
+                        break
+            if grudge_blade is not None and source_character is not None and source_character is not self and source_character.owner_id != self.owner_id and source_character.alive:
+                if self is grudge_blade:
+                    if grudge_blade.grudge_self_timer <= 0.0:
+                        grudge_blade.grudge_self_timer = GRUDGE_SELF_APPLY_CD
+                        source_character.envy_grudge = getattr(source_character, "envy_grudge", 0) + 1
+                elif self is not grudge_blade and grudge_blade.grudge_ally_timer <= 0.0:
+                    grudge_blade.grudge_ally_timer = GRUDGE_ALLY_APPLY_CD
+                    source_character.envy_grudge = getattr(source_character, "envy_grudge", 0) + 1
+            if (
+                self.job_name == GRUDGE_JOB_NAME
+                and source_character is not None
+                and source_character is not self
+                and source_character.owner_id != self.owner_id
+                and source_character.alive
+                and (source_character.pos - self.pos).length() <= self.get_current_attack_range()
+                and game_state is not None
+                and game_state.get("elapsed_time", 0.0) - getattr(self, "_grudge_last_counter", -99.0) >= 0.3
+            ):
+                self._grudge_last_counter = game_state.get("elapsed_time", 0.0)
+                envy_count = sum(1 for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id and getattr(c, "faction_tag", None) == "嫉妒")
+                if envy_count >= GRUDGE_FACTION_REQUIRED:
+                    # 铭刻于心：2×普攻×(1+复仇记录%/层) + 4流血 + 击退20
+                    counter_damage = GRUDGE_ENGRAVE_DAMAGE_MULT * self.get_current_basic_damage() * (1.0 + self.grudge_memories * GRUDGE_MEMORY_DAMAGE_PER)
+                    source_character.take_damage(counter_damage, source=self, damage_type="design_physical_grudge_counter", game_state=game_state)
+                    if isinstance(source_character, Character):
+                        source_character.apply_bleed(GRUDGE_ENGRAVE_BLEED)
+                        knock = source_character.pos - self.pos
+                        if knock.length_squared() > 0:
+                            source_character.apply_knockback(knock.normalize(), GRUDGE_ENGRAVE_KNOCKBACK)
+                elif self.grudge_spree_cd <= 0.0:
+                    # 大闹一场：护盾(已失去体力30%) + 1×普攻 + 2流血
+                    self.grudge_spree_cd = GRUDGE_SPREE_CD
+                    self.add_true_shield(max(0.0, self.max_hp - self.hp) * GRUDGE_SPREE_SHIELD_RATIO)
+                    counter_damage = GRUDGE_SPREE_DAMAGE_MULT * self.get_current_basic_damage()
+                    source_character.take_damage(counter_damage, source=self, damage_type="design_physical_grudge_counter", game_state=game_state)
+                    if isinstance(source_character, Character):
+                        source_character.apply_bleed(GRUDGE_SPREE_BLEED)
         if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
             if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
                 source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
@@ -4290,6 +4369,7 @@ class Character:
         self.update_soul_fire(dt, game_state)
         self.update_envy_cast(dt, game_state)
         self.update_loyal_guard(dt, game_state)
+        self.update_grudge_blade(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)

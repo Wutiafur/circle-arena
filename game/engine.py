@@ -4396,6 +4396,21 @@ def cast_design_skill(caster, game_state, token=None):
             caster.pos = end
             caster.update_rect()
         return True
+    elif token == "grudge_ult":
+        # 加倍奉还：最近敌人 20+1×普攻 + 2流血 + 击退40，流血≥6时威力+20%
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is not None:
+            ult_damage = GRUDGE_ULT_DAMAGE_BASE + GRUDGE_ULT_ATTACK * caster.get_current_basic_damage()
+            if int(getattr(target, "bleed_stacks", 0)) >= GRUDGE_ULT_BLEED_THRESHOLD:
+                ult_damage *= 1.0 + GRUDGE_ULT_BLEED_BONUS
+            target.take_damage(ult_damage, source=caster, damage_type="design_physical_grudge_ult", game_state=game_state)
+            if isinstance(target, Character):
+                target.apply_bleed(GRUDGE_ULT_BLEED)
+                knock = target.pos - caster.pos
+                if knock.length_squared() > 0:
+                    target.apply_knockback(knock.normalize(), GRUDGE_ULT_KNOCKBACK)
+            spawn_attack_impact(game_state, target.pos, GRUDGE_COLOR, radius=14, thickness=3, burst_count=12)
+        return True
     elif token == "loyal_vanguard":
         # 忠义的证明：对最近敌人造成 40+1×普攻 物理伤害并眩晕 3 秒
         target = select_nearest_enemy(caster, game_state["characters"])
