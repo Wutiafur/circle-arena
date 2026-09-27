@@ -114,6 +114,7 @@ class Character:
         self.prelate_fort_done = False
         self.prelate_bless = False
         self.prelate_wrap_pending = False
+        self.prelate_lone_buff = False
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -1695,6 +1696,12 @@ class Character:
             for c in game_state["characters"]:
                 if c.alive and c.owner_id == self.owner_id and getattr(c, "faction_tag", None) == "嫉妒":
                     c.prelate_bless = True
+        # 孤狼觉醒：友方其他嫉妒角色全部阵亡 → 立刻莱瓦汀 + 30%物理吸血 + 30%受伤减免
+        if not self.prelate_lone_buff:
+            ally_envy = [c for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id and c is not self and getattr(c, "faction_tag", None) == "嫉妒"]
+            if not ally_envy:
+                self.prelate_lone_buff = True
+                self.prelate_leavatin = True
         self.prelate_ten_sec_timer += dt
         while self.prelate_ten_sec_timer >= PRELATE_REVENGE_REFRESH:
             self.prelate_ten_sec_timer -= PRELATE_REVENGE_REFRESH
@@ -2235,6 +2242,8 @@ class Character:
             damage *= 1.0 - GRUDGE_FORT_REDUCTION
         if getattr(self, "prelate_bless", False) and damage > 0:
             damage *= 1.0 - PRELATE_FORT_REDUCTION
+        if getattr(self, "prelate_lone_buff", False) and damage > 0:
+            damage *= 1.0 - PRELATE_LONE_REDUCTION
         if self.design_tide_link_active and not self._tide_share and damage > 0 and game_state is not None:
             members = [m for m in game_state.get("characters", []) if m.alive and getattr(m, "design_tide_link_active", False)]
             if len(members) >= 2:
@@ -2638,6 +2647,9 @@ class Character:
                         source_character.apply_bleed(GRUDGE_SPREE_BLEED)
         # 嫉妒主教：受击叠复仇对象 + 嫉妒-仇怨 + 反击之力；友方嫉妒受击→仇怨
         if damage > 0 and self.hp > 0:
+            # 孤狼觉醒：主教物理伤害 30% 吸血
+            if source_character is not None and getattr(source_character, "prelate_lone_buff", False) and damage_kind == DAMAGE_KIND_PHYSICAL:
+                source_character.heal(damage * PRELATE_LONE_LIFESTEAL)
             # 莱瓦汀：每次普攻命中目标 +1 燃烧 +1 流血
             if source_character is not None and source_character.job_name == PRELATE_JOB_NAME and getattr(source_character, "prelate_leavatin", False) and "basic" in str(damage_type):
                 self.burn_stacks += 1
