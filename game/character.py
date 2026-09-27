@@ -93,6 +93,27 @@ class Character:
         self.grudge_ally_timer = 0.0
         self.grudge_spree_cd = 0.0
         self.grudge_fortress_done = False
+        # 燃烧层数（通用）：每2秒造成层数×2伤害，每5秒衰减1层
+        self.burn_stacks = 0
+        self.burn_tick_timer = 0.0
+        self.burn_decay_timer = 0.0
+        # 嫉妒主教 126 嫉妒-仇怨 / 长姊 / 封印剑 / 报复对象 / 祝福
+        self.prelate_resentment = 0
+        self.prelate_elder_mark = 0
+        self.prelate_seal_broken = 0
+        self.prelate_leavatin = False
+        self.prelate_revenge_target_id = None
+        self.prelate_ten_sec_timer = 0.0
+        self.prelate_grudge_timer = 0.0
+        self.prelate_self_hit_timer = 0.0
+        self.prelate_self_hit_count = 0
+        self.prelate_ally_hit_timer = 0.0
+        self.prelate_counter_cd = 0.0
+        self.prelate_exe_charge = 0.0
+        self.prelate_exe_target_id = None
+        self.prelate_fort_done = False
+        self.prelate_bless = False
+        self.prelate_wrap_pending = False
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -856,6 +877,10 @@ class Character:
             damage *= 1.0 + LOYAL_TATTOO_DAMAGE_PER * self.loyal_tattoo_stacks
         if self.envy_blessing_timer > 0:
             damage *= 1.0 + LOYAL_PROTECT_DAMAGE
+        if self.prelate_leavatin:
+            damage += PRELATE_LEAVATIN_ATTACK_BONUS
+        if self.prelate_bless:
+            damage *= 1.0 + PRELATE_FORT_DAMAGE
         return max(1.0, damage)
 
     def get_current_melee_stun_duration(self):
@@ -1597,6 +1622,96 @@ class Character:
                 lowest = min(allies, key=lambda c: (c.hp / max(1.0, c.max_hp), c.max_hp))
                 lowest.envy_fortress = True
 
+    def gain_prelate_resentment(self, amount, game_state):
+        """嫉妒主教：获得嫉妒-仇怨，当前攻击目标带【报复对象】时额外 +1。"""
+        bonus = 0
+        if game_state is not None and self.prelate_revenge_target_id is not None:
+            target = self.get_target(game_state)
+            if target is not None and target.id == self.prelate_revenge_target_id:
+                bonus = 1
+        self.prelate_resentment = min(PRELATE_RESENTMENT_MAX, self.prelate_resentment + amount + bonus)
+
+    def gain_prelate_elder_from_resentment(self):
+        """每消耗 10 层嫉妒-仇怨 → 1 层长姊纹身。"""
+        self.prelate_elder_mark += self.prelate_resentment // PRELATE_ELDER_PER
+
+    def apply_burn(self, stacks):
+        self.burn_stacks += max(0, stacks)
+
+    def unwrap_packaging(self, game_state):
+        """拆开包装吧：攻击最近敌人 3×20 + 3 流血 + 封印解除 +1 + 长姊 -1。"""
+        target = select_nearest_enemy(self, game_state["characters"])
+        if target is not None:
+            target.take_damage(PRELATE_UNWRAP_HITS * PRELATE_UNWRAP_DAMAGE, source=self, damage_type="design_physical_prelate_unwrap", game_state=game_state)
+            if isinstance(target, Character):
+                target.apply_bleed(PRELATE_UNWRAP_BLEED)
+        if self.prelate_elder_mark > 0:
+            self.prelate_elder_mark -= 1
+        self.prelate_seal_broken += 1
+        if self.prelate_seal_broken >= 3:
+            self.prelate_seal_broken = 0
+            self.prelate_leavatin = True
+        spawn_attack_impact(game_state, self.pos, PRELATE_COLOR, radius=18, thickness=3, burst_count=12)
+
+    def release_prelate_execution_final(self, game_state):
+        """即刻处刑第五下（蓄力后）：80 伤害 + 半径30 AoE 50 + 击退30。"""
+        target = None
+        if self.prelate_exe_target_id is not None:
+            for c in game_state["characters"]:
+                if c.id == self.prelate_exe_target_id:
+                    target = c
+                    break
+        if target is None or not getattr(target, "alive", False):
+            target = select_nearest_enemy(self, game_state["characters"])
+        if target is not None:
+            target.take_damage(PRELATE_EXE_FIFTH_DAMAGE, source=self, damage_type="design_physical_prelate_exe_final", game_state=game_state)
+            for enemy in get_targetables(game_state):
+                if enemy.alive and enemy.owner_id != self.owner_id and (enemy.pos - target.pos).length() <= PRELATE_EXE_AOE_RADIUS + getattr(enemy, "radius", 0):
+                    enemy.take_damage(PRELATE_EXE_AOE_DAMAGE, source=self, damage_type="design_physical_prelate_exe_aoe", game_state=game_state)
+                    if isinstance(enemy, Character):
+                        knock = enemy.pos - target.pos
+                        if knock.length_squared() > 0:
+                            enemy.apply_knockback(knock.normalize(), PRELATE_EXE_KNOCKBACK)
+            spawn_attack_impact(game_state, target.pos, PRELATE_COLOR, radius=PRELATE_EXE_AOE_RADIUS, thickness=4, burst_count=24)
+
+    def update_prelate(self, dt, game_state):
+        """嫉妒主教：开场祝福 / 每10秒报复刷新与仇怨 / 拆开包装 / 即刻处刑第五下蓄力 / 反击冷却。"""
+        if self.job_name != PRELATE_JOB_NAME:
+            return
+        if self.prelate_counter_cd > 0:
+            self.prelate_counter_cd = max(0.0, self.prelate_counter_cd - dt)
+        if self.prelate_grudge_timer > 0:
+            self.prelate_grudge_timer = max(0.0, self.prelate_grudge_timer - dt)
+        if self.prelate_self_hit_timer > 0:
+            self.prelate_self_hit_timer = max(0.0, self.prelate_self_hit_timer - dt)
+            if self.prelate_self_hit_timer == 0.0:
+                self.prelate_self_hit_count = 0
+        if self.prelate_ally_hit_timer > 0:
+            self.prelate_ally_hit_timer = max(0.0, self.prelate_ally_hit_timer - dt)
+        if game_state is None:
+            return
+        if not self.prelate_fort_done:
+            self.prelate_fort_done = True
+            for c in game_state["characters"]:
+                if c.alive and c.owner_id == self.owner_id and getattr(c, "faction_tag", None) == "嫉妒":
+                    c.prelate_bless = True
+        self.prelate_ten_sec_timer += dt
+        while self.prelate_ten_sec_timer >= PRELATE_REVENGE_REFRESH:
+            self.prelate_ten_sec_timer -= PRELATE_REVENGE_REFRESH
+            enemies = [c for c in game_state["characters"] if c.alive and c.owner_id != self.owner_id]
+            if enemies:
+                worst = max(enemies, key=lambda e: max(0.0, float(getattr(e, "envy_harm", 0.0))))
+                self.prelate_revenge_target_id = worst.id
+            envy_allies = sum(1 for c in game_state["characters"] if c.alive and c.owner_id == self.owner_id and getattr(c, "faction_tag", None) == "嫉妒")
+            self.gain_prelate_resentment(envy_allies, game_state)
+        if self.prelate_exe_charge > 0:
+            self.prelate_exe_charge = max(0.0, self.prelate_exe_charge - dt)
+            if self.prelate_exe_charge == 0.0:
+                self.release_prelate_execution_final(game_state)
+        if self.prelate_wrap_pending and self.hp < self.max_hp * PRELATE_HP_THRESHOLD and self.prelate_elder_mark >= 1:
+            self.prelate_wrap_pending = False
+            self.unwrap_packaging(game_state)
+
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
             return
@@ -2118,6 +2233,8 @@ class Character:
         is_true_damage = str(damage_type).startswith("true_")
         if getattr(self, "envy_fortress", False) and damage > 0:
             damage *= 1.0 - GRUDGE_FORT_REDUCTION
+        if getattr(self, "prelate_bless", False) and damage > 0:
+            damage *= 1.0 - PRELATE_FORT_REDUCTION
         if self.design_tide_link_active and not self._tide_share and damage > 0 and game_state is not None:
             members = [m for m in game_state.get("characters", []) if m.alive and getattr(m, "design_tide_link_active", False)]
             if len(members) >= 2:
@@ -2469,9 +2586,9 @@ class Character:
                     source_character.apply_bleed(LOYAL_COUNTER_BLEED)
         # 怨仇刃卫：复仇对象消耗 + 施加 + 双形态反击（嫉妒≥3铭刻于心 / <3大闹一场）
         if damage > 0 and self.hp > 0:
-            if source_character is not None and source_character.job_name == GRUDGE_JOB_NAME and getattr(self, "envy_grudge", 0) > 0:
+            if source_character is not None and source_character.job_name in (GRUDGE_JOB_NAME, PRELATE_JOB_NAME) and getattr(self, "envy_grudge", 0) > 0:
                 dt_str = str(damage_type)
-                if "basic" in dt_str or "grudge_counter" in dt_str:
+                if "basic" in dt_str or "counter" in dt_str:
                     consumed = int(getattr(self, "envy_grudge", 0))
                     self.envy_grudge = 0
                     self.envy_notebook = min(ENVY_NOTEBOOK_MAX, getattr(self, "envy_notebook", 0) + consumed)
@@ -2519,6 +2636,38 @@ class Character:
                     source_character.take_damage(counter_damage, source=self, damage_type="design_physical_grudge_counter", game_state=game_state)
                     if isinstance(source_character, Character):
                         source_character.apply_bleed(GRUDGE_SPREE_BLEED)
+        # 嫉妒主教：受击叠复仇对象 + 嫉妒-仇怨 + 反击之力；友方嫉妒受击→仇怨
+        if damage > 0 and self.hp > 0:
+            # 莱瓦汀：每次普攻命中目标 +1 燃烧 +1 流血
+            if source_character is not None and source_character.job_name == PRELATE_JOB_NAME and getattr(source_character, "prelate_leavatin", False) and "basic" in str(damage_type):
+                self.burn_stacks += 1
+                self.apply_bleed(1)
+            prelate = None
+            if game_state is not None:
+                for c in game_state["characters"]:
+                    if c.job_name == PRELATE_JOB_NAME and c.owner_id == self.owner_id:
+                        prelate = c
+                        break
+            if prelate is not None and source_character is not None and source_character is not self and source_character.owner_id != self.owner_id and source_character.alive:
+                if self is prelate:
+                    if prelate.prelate_grudge_timer <= 0.0:
+                        prelate.prelate_grudge_timer = GRUDGE_SELF_APPLY_CD
+                        source_character.envy_grudge = getattr(source_character, "envy_grudge", 0) + 1
+                    if prelate.prelate_self_hit_timer <= 0.0 or prelate.prelate_self_hit_count < PRELATE_SELF_HIT_MAX:
+                        if prelate.prelate_self_hit_timer <= 0.0:
+                            prelate.prelate_self_hit_timer = PRELATE_SELF_HIT_CD
+                            prelate.prelate_self_hit_count = 0
+                        prelate.prelate_self_hit_count += 1
+                        prelate.gain_prelate_resentment(1, game_state)
+                    if prelate.prelate_counter_cd <= 0.0 and (source_character.pos - self.pos).length() <= self.get_current_attack_range():
+                        prelate.prelate_counter_cd = PRELATE_COUNTER_CD
+                        prelate.add_true_shield(max(0.0, prelate.max_hp - prelate.hp) * PRELATE_COUNTER_SHIELD_RATIO)
+                        source_character.take_damage(PRELATE_COUNTER_DAMAGE, source=prelate, damage_type="design_physical_prelate_counter", game_state=game_state)
+                        if isinstance(source_character, Character):
+                            source_character.apply_bleed(PRELATE_COUNTER_BLEED)
+                elif getattr(self, "faction_tag", None) == "嫉妒" and prelate.prelate_ally_hit_timer <= 0.0:
+                    prelate.prelate_ally_hit_timer = PRELATE_ALLY_HIT_CD
+                    prelate.gain_prelate_resentment(1, game_state)
         if damage > 0 and self.job_name == "DesignRole69_ironclad" and source_character is not None and source_character is not self:
             if any(tok in str(damage_type) for tok in ("melee", "swing", "slash", "claw", "punch", "bash", "thrust")):
                 source_character.take_damage(damage * IRONCLAD_THORN_RATIO, source=self, damage_type="true_ironclad_thorn", game_state=game_state)
@@ -3777,6 +3926,17 @@ class Character:
             self.attack_slow_timer = max(0.0, self.attack_slow_timer - dt)
         if self.envy_blessing_timer > 0:
             self.envy_blessing_timer = max(0.0, self.envy_blessing_timer - dt)
+        # 燃烧：每2秒造成层数×2伤害，每5秒衰减1层
+        if self.burn_stacks > 0:
+            self.burn_tick_timer += dt
+            while self.burn_tick_timer >= PRELATE_BURN_TICK_INTERVAL:
+                self.burn_tick_timer -= PRELATE_BURN_TICK_INTERVAL
+                if game_state is not None:
+                    self.take_damage(self.burn_stacks * PRELATE_BURN_DAMAGE_PER, source=None, damage_type="design_burn_tick", game_state=game_state)
+            self.burn_decay_timer += dt
+            while self.burn_decay_timer >= PRELATE_BURN_DECAY_INTERVAL:
+                self.burn_decay_timer -= PRELATE_BURN_DECAY_INTERVAL
+                self.burn_stacks = max(0, self.burn_stacks - 1)
         if self.control_immunity_timer > 0:
             self.control_immunity_timer = max(0.0, self.control_immunity_timer - dt)
         if self.equilibrium_mark_timer > 0:
@@ -4370,6 +4530,7 @@ class Character:
         self.update_envy_cast(dt, game_state)
         self.update_loyal_guard(dt, game_state)
         self.update_grudge_blade(dt, game_state)
+        self.update_prelate(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)

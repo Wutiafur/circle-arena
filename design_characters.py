@@ -206,6 +206,7 @@ ROLE_CONFIG_OVERRIDES = {
     123: {"skill_token": "envy_priest", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
     124: {"skill_token": "loyal_vanguard", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
     125: {"skill_token": "grudge_ult", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
+    126: {"skill_token": "prelate_ult", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
 }
 
 

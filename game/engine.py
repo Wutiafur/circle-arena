@@ -4411,6 +4411,36 @@ def cast_design_skill(caster, game_state, token=None):
                     target.apply_knockback(knock.normalize(), GRUDGE_ULT_KNOCKBACK)
             spawn_attack_impact(game_state, target.pos, GRUDGE_COLOR, radius=14, thickness=3, burst_count=12)
         return True
+    elif token == "prelate_ult":
+        # 消耗全部嫉妒-仇怨 → 长姊；技能后可拆开包装；莱瓦汀时改用即刻处刑
+        caster.gain_prelate_elder_from_resentment()
+        caster.prelate_resentment = 0
+        caster.prelate_wrap_pending = True
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return True
+        if caster.prelate_leavatin:
+            # 即刻处刑：长姊+10%、目标燃烧+流血每2层+1%(≤40%)、前三下2×普攻、第四眩晕+60、第五蓄力3s
+            bonus = 1.0 + (PRELATE_EXE_ELDER_BONUS if caster.prelate_elder_mark >= 1 else 0.0)
+            burnbleed = int(getattr(target, "burn_stacks", 0)) + int(getattr(target, "bleed_stacks", 0))
+            bonus += min(PRELATE_EXE_MAX_BONUS, (burnbleed // PRELATE_EXE_BURNBLEED_PER) * 0.01)
+            first = PRELATE_EXE_ATTACK_MULT * caster.get_current_basic_damage() * bonus
+            target.take_damage(first * PRELATE_EXE_FIRST_HITS, source=caster, damage_type="design_physical_prelate_exe", game_state=game_state)
+            if isinstance(target, Character):
+                target.apply_burn(PRELATE_EXE_BURN)
+                target.apply_bleed(PRELATE_EXE_BLEED)
+            target.take_damage(PRELATE_EXE_FOURTH_DAMAGE * bonus, source=caster, damage_type="design_physical_prelate_exe3", game_state=game_state)
+            if isinstance(target, Character):
+                target.apply_stun(PRELATE_EXE_STUN)
+            caster.prelate_exe_charge = PRELATE_EXE_CHARGE
+            caster.prelate_exe_target_id = target.id
+        else:
+            # 仇怨重踏：4 次攻击，每次 12 物理 + 1 流血
+            for _ in range(PRELATE_ULT_HITS):
+                target.take_damage(PRELATE_ULT_DAMAGE, source=caster, damage_type="design_physical_prelate_ult", game_state=game_state)
+                if isinstance(target, Character):
+                    target.apply_bleed(PRELATE_ULT_BLEED)
+        return True
     elif token == "loyal_vanguard":
         # 忠义的证明：对最近敌人造成 40+1×普攻 物理伤害并眩晕 3 秒
         target = select_nearest_enemy(caster, game_state["characters"])
