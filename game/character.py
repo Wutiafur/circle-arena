@@ -4461,7 +4461,8 @@ class Character:
             self.design_shell_counter_timer += dt
             while self.design_shell_counter_timer >= XUANWU_COUNTER_INTERVAL:
                 self.design_shell_counter_timer -= XUANWU_COUNTER_INTERVAL
-                while self.design_shell_stacks >= XUANWU_COUNTER_SHELL_STEP:
+                # 修复：原为 while stacks>=STEP 连打，但 xuanwu_counterattack 无敌人时提前 return 不消耗 → 死循环
+                if self.design_shell_stacks >= XUANWU_COUNTER_SHELL_STEP:
                     self.xuanwu_counterattack(game_state)
             if self.design_xuan_bulwark_timer > 0:
                 self.design_xuan_bulwark_timer = max(0.0, self.design_xuan_bulwark_timer - dt)
