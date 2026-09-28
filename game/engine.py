@@ -1614,7 +1614,8 @@ class DesignEffect:
                         self.data["target_id"] = id(target)
                 if target is not None and target.alive and self.owner is not None:
                     crit = random.random() < SOUL_NINE_SLASH_CRIT_CHANCE
-                    damage = SOUL_NINE_SLASH_DAMAGE * (SOUL_NINE_SLASH_CRIT_MULT if crit else 1.0)
+                    missing_hp = max(0.0, getattr(target, "max_hp", 0.0) - max(0.0, getattr(target, "hp", 0.0)))
+                    damage = (SOUL_NINE_SLASH_DAMAGE + SOUL_NINE_SLASH_LOST_HP_RATIO * missing_hp) * (SOUL_NINE_SLASH_CRIT_MULT if crit else 1.0)
                     dealt = target.take_damage(damage, source=self.owner, damage_type="design_physical_soul_slash", game_state=game_state)
                     slash_color = SOUL_SLASH_CRIT_COLOR if crit else SOUL_SLASH_COLOR
                     attack_origin = pygame.Vector2(self.pos)
