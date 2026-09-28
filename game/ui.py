@@ -292,7 +292,7 @@ def draw_pause_menu(surface, title_font, subtitle_font, button_font, hover_name)
 
 
 
-def draw_pokedex(screen, title_font, subtitle_font, body_font, button_font, selected_name, list_scroll_offset, detail_scroll_offset, hover_name, search_query="", stats=None, ordered_names=None, cached_detail=None):
+def draw_pokedex(screen, title_font, subtitle_font, body_font, button_font, selected_name, list_scroll_offset, detail_scroll_offset, hover_name, search_query="", stats=None, ordered_names=None, cached_detail=None, list_thumb_dragging=False):
     screen.fill(BACKGROUND_COLOR)
 
     title = title_font.render(POKEDEX_UI_TEXT["title"], True, TEXT_COLOR)
@@ -380,12 +380,19 @@ def draw_pokedex(screen, title_font, subtitle_font, body_font, button_font, sele
     content_h = sum(header_h if t == "header" else row_h for t, _ in entries)
     visible_h = list_panel.height - 24
     list_max_scroll = max(0, content_h - visible_h)
+    # 列表右侧滑动条：轨道 + 滑块（与擂台选人同款交互，几何返回给循环层做拖动/点轨道跳转）
+    track_rect = None
+    thumb_rect = None
     if list_max_scroll > 0:
-        track = pygame.Rect(list_panel.right - 8, list_panel.top + 8, 4, list_panel.height - 16)
-        thumb_h = max(16, int(visible_h * visible_h / content_h))
-        thumb_y = track.top + int((track.height - thumb_h) * list_scroll_offset / list_max_scroll)
-        pygame.draw.rect(screen, (60, 72, 88), track, border_radius=2)
-        pygame.draw.rect(screen, (130, 148, 172), pygame.Rect(track.left, thumb_y, 4, thumb_h), border_radius=2)
+        bar_left = list_panel.right - 14
+        bar_width = 8
+        track_rect = pygame.Rect(bar_left, list_panel.top + 8, bar_width, list_panel.height - 16)
+        thumb_h = max(18, int(visible_h * visible_h / content_h))
+        thumb_y = track_rect.top + int((track_rect.height - thumb_h) * list_scroll_offset / list_max_scroll)
+        thumb_rect = pygame.Rect(bar_left, thumb_y, bar_width, thumb_h)
+        pygame.draw.rect(screen, (44, 56, 72), track_rect, border_radius=4)
+        thumb_color = (176, 205, 240) if list_thumb_dragging else (128, 148, 172)
+        pygame.draw.rect(screen, thumb_color, thumb_rect, border_radius=4)
 
     if cached_detail is not None:
         detail_surface, detail_viewport, detail_max_scroll = cached_detail
@@ -407,9 +414,9 @@ def draw_pokedex(screen, title_font, subtitle_font, body_font, button_font, sele
 
     if search_query:
         count_text = body_font.render(f"{len(filtered)} 条结果", True, (140, 152, 168))
-        screen.blit(count_text, count_text.get_rect(bottomright=(list_panel.right - 12, list_panel.bottom - 10)))
+        screen.blit(count_text, count_text.get_rect(bottomright=(list_panel.right - 28, list_panel.bottom - 10)))
 
-    return return_rect, item_rects, list_panel, detail_panel, row_h, detail_max_scroll
+    return return_rect, item_rects, list_panel, detail_panel, row_h, detail_max_scroll, track_rect, thumb_rect
 
 
 def draw_effectdex(screen, title_font, subtitle_font, body_font, button_font, selected_name, list_scroll_offset, detail_scroll_offset, hover_name):

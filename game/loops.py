@@ -81,6 +81,10 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
         selected_name = filtered[0] if filtered else ordered_names[0]
     list_scroll_offset = 0
     detail_scroll_offset = 0
+    list_dragging = False
+    list_drag_offset = 0.0
+    list_track_rect = None
+    list_thumb_rect = None
     list_panel = pygame.Rect(36, 154, 240, 556)
     detail_panel = pygame.Rect(300, 104, 464, 668)
     row_h = 44
@@ -119,6 +123,14 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
                     continue
                 if pygame.Rect(36, 722, 220, 40).collidepoint(mapped_pos):
                     return "menu"
+                # 列表滑动条交互：拖动滑块 / 点击轨道按比例跳转（与擂台选人同款）
+                if list_track_rect is not None and list_track_rect.collidepoint(mapped_pos):
+                    if list_thumb_rect is not None and list_thumb_rect.collidepoint(mapped_pos):
+                        list_dragging = True
+                        list_drag_offset = mapped_pos[1] - list_thumb_rect.top
+                    elif max_scroll > 0:
+                        ratio = (mapped_pos[1] - list_track_rect.top - list_thumb_rect.height / 2) / max(1, list_track_rect.height - list_thumb_rect.height)
+                        list_scroll_offset = int(clamp(round(ratio * max_scroll), 0, max_scroll))
                 for name, rect in item_rects.items():
                     if rect.collidepoint(mapped_pos):
                         if selected_name != name:
@@ -127,6 +139,13 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
                             detail_scroll_offset = 0
                             _, _, detail_max_scroll = build_detail(selected_name)
                         break
+            if event.type == pygame.MOUSEMOTION and list_dragging:
+                mapped_pos = map_window_pos_to_canvas(event.pos, canvas_rect, device_pixel_ratio)
+                if mapped_pos is not None and list_track_rect is not None and max_scroll > 0:
+                    ratio = (mapped_pos[1] - list_track_rect.top - list_drag_offset) / max(1, list_track_rect.height - list_thumb_rect.height)
+                    list_scroll_offset = int(clamp(round(ratio * max_scroll), 0, max_scroll))
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                list_dragging = False
             if event.type == pygame.MOUSEWHEEL:
                 hover_mouse_pos = map_window_pos_to_canvas(pygame.mouse.get_pos(), canvas_rect, device_pixel_ratio)
                 if hover_mouse_pos is not None and list_panel.collidepoint(hover_mouse_pos):
@@ -190,6 +209,8 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
             detail_panel,
             row_h,
             detail_max_scroll,
+            list_track_rect,
+            list_thumb_rect,
         ) = draw_pokedex(
             canvas_surface,
             title_font,
@@ -204,6 +225,7 @@ def pokedex_loop(screen, clock, title_font, subtitle_font, body_font, button_fon
             stats,
             ordered_names,
             build_detail(selected_name),
+            list_thumb_dragging=list_dragging,
         )
         present_canvas(screen, canvas_surface, canvas_rect)
         detail_scroll_offset = int(clamp(detail_scroll_offset, 0, detail_max_scroll))
