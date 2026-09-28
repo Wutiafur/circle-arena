@@ -115,6 +115,7 @@ class Character:
         self.prelate_bless = False
         self.prelate_wrap_pending = False
         self.prelate_lone_buff = False
+        self.prelate_leavatin_pulse = 0.0
         self.rect = pygame.Rect(0, 0, CHARACTER_SIZE, CHARACTER_SIZE)
         self.wander_dir = random_unit_vector()
         self.wander_timer = random.uniform(0.8, 1.6)
@@ -1674,6 +1675,8 @@ class Character:
         """嫉妒主教：开场祝福 / 每10秒报复刷新与仇怨 / 拆开包装 / 即刻处刑第五下蓄力 / 反击冷却。"""
         if self.job_name != PRELATE_JOB_NAME:
             return
+        if self.prelate_leavatin:
+            self.prelate_leavatin_pulse += dt
         if self.prelate_counter_cd > 0:
             self.prelate_counter_cd = max(0.0, self.prelate_counter_cd - dt)
         if self.prelate_grudge_timer > 0:
@@ -5078,6 +5081,15 @@ class Character:
                 pygame.draw.circle(surface, XUANWU_SHELL_COLOR, center, shell_ring, 2)
             if self.design_xuan_bulwark_timer > 0:
                 pygame.draw.circle(surface, XUANWU_BULWARK_COLOR, center, round(self.radius + 13), 2)
+        # 莱瓦汀：暗金火焰脉动光环 + 头顶小火苗（封印之剑觉醒）
+        if self.job_name == PRELATE_JOB_NAME and self.prelate_leavatin:
+            pulse = 0.5 + 0.5 * math.sin(self.prelate_leavatin_pulse * 6.0)
+            pygame.draw.circle(surface, (238, 204, 108), center, round(self.radius + 9 + pulse * 4), 2)
+            pygame.draw.circle(surface, (180, 110, 40), center, round(self.radius + 14 + pulse * 2), 1)
+            flame_y = center[1] - self.radius - 15
+            for i in range(3):
+                pygame.draw.circle(surface, (238, 200, 90), (center[0], round(flame_y + i * 3)), 5 - i)
+                pygame.draw.circle(surface, (120, 60, 20), (center[0], round(flame_y + i * 3)), 5 - i, 1)
         if self.is_dragon():
             form_color = DRAGON_THUNDER_COLOR if self.design_dragon_form == "thunder" else DRAGON_WOOD_COLOR
             pygame.draw.circle(surface, form_color, center, round(self.radius + 8), 2)
