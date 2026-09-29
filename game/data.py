@@ -1061,7 +1061,7 @@ RAY_WIDTH = 50.0
 RAY_DURATION = 5.0
 RAY_DPS = 40.0
 RAY_RESIST_STEP = 0.01
-RAY_TURN_SPEED = 1.1
+RAY_TURN_SPEED = 0.2618  # 慢速转向：1 秒约转过 15°
 RAY_COLOR = (222, 64, 54)
 RAY_CORE_COLOR = (255, 226, 200)
 # 连杀增益：连杀 3/5/8 触发层级，持续时间内普攻增伤，部分层级即时回血
