@@ -4200,8 +4200,9 @@ def cast_design_skill(caster, game_state, token=None):
         landing_pos.y = clamp(landing_pos.y, ARENA_RECT.top + 12, ARENA_RECT.bottom - 12)
         game_state["beam_events"].append(BeamEvent(caster.pos, landing_pos, (86, 224, 232)))
         spawn_attack_impact(game_state, landing_pos, (86, 224, 232), radius=10, thickness=2, burst_count=6)
-        if game_state.get("timed_weapon_orb_drops_enabled", True):
-            game_state["weapon_orbs"].append(WeaponOrb("ColdSpear", landing_pos, lifetime=PHANTOM_LANCER_SPEAR_LIFETIME))
+        # 冷锋枪插地实体：这是技能自带的实体长枪（有绘制、可拾取、5 秒后消失），
+        # 不受「定时武器掉落」开关限制——关掉定时掉落时冷锋枪实体依然存在
+        game_state["weapon_orbs"].append(WeaponOrb("ColdSpear", landing_pos, lifetime=PHANTOM_LANCER_SPEAR_LIFETIME))
         caster.phantom_lancer_throw_speed_timer = PHANTOM_LANCER_THROW_SPEED_DURATION
         caster.phantom_lancer_spear_hunt_timer = PHANTOM_LANCER_SPEAR_HUNT_DURATION
     elif token == "soul_arbiter_bond":
