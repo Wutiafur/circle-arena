@@ -405,6 +405,7 @@ class Character:
         # 128 聚光使：贯穿激光法抗削减（累计、结束恢复）
         self.design_ray_resist_timer = 0.0
         self.design_ray_resist_total = 0.0
+        self.design_ray_channel_timer = 0.0
         self.gravekeeper_rot_stacks = 0
         self.gravekeeper_rot_timer = 0.0
         self.design_xuan_bulwark_timer = 0.0
@@ -4554,9 +4555,16 @@ class Character:
         if self.melee_gap_dash_cooldown > 0:
             self.melee_gap_dash_cooldown = max(0.0, self.melee_gap_dash_cooldown - dt)
 
+        # 聚光使【贯穿激光】引导计时递减；引导期间即使 MP 满也不得再次释放主动技能
+        if getattr(self, "design_ray_channel_timer", 0.0) > 0:
+            self.design_ray_channel_timer = max(0.0, self.design_ray_channel_timer - dt)
+
         if self.mp >= MAX_MP and self.clone_mode is None and (
             self.stun_timer <= 0
             or self.config["skill_id"] in {"time_rewind", "sunfire_kagura"}
+        ) and (
+            self.job_name != LIGHTWEAVER_JOB_NAME
+            or getattr(self, "design_ray_channel_timer", 0.0) <= 0
         ):
             self.cast_skill(game_state)
 
@@ -4728,6 +4736,12 @@ class Character:
             apply_chase_noise = False
 
         if self.design_immobile:
+            desired = pygame.Vector2()
+            hold_position = True
+            apply_chase_noise = False
+
+        # 聚光使【贯穿激光】引导期间：角色定身，不可移动
+        if getattr(self, "design_ray_channel_timer", 0.0) > 0:
             desired = pygame.Vector2()
             hold_position = True
             apply_chase_noise = False

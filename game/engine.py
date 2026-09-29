@@ -4157,7 +4157,10 @@ def cast_design_skill(caster, game_state, token=None):
                 ),
             )
     elif token == "pierce_ray":
-        # 聚光使【贯穿激光】：朝最近敌人方向发射宽 50 全场激光，持续 5 秒
+        # 聚光使【贯穿激光】：朝最近敌人方向发射宽 50 全场激光，持续 5 秒；
+        # 引导期间角色定身且不能再次释放主动技能
+        if getattr(caster, "design_ray_channel_timer", 0.0) > 0:
+            return False
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = pygame.Vector2(1, 0)
         if target is not None:
@@ -4180,6 +4183,7 @@ def cast_design_skill(caster, game_state, token=None):
                 turn_speed=RAY_TURN_SPEED,
             ),
         )
+        caster.design_ray_channel_timer = RAY_DURATION
         game_state["beam_events"].append(BeamEvent(caster.pos, caster.pos + direction * 1200, RAY_COLOR))
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
