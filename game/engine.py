@@ -1648,6 +1648,79 @@ class DesignEffect:
                 self.pos = start_vec.lerp(owner.pos, progress)
             if self.lifetime <= 0:
                 self.alive = False
+        elif self.effect_type == "laze":
+            # 聚光使【激光滋人】：跟随目标，第 1/2/3 秒各结算 30/40/50 法伤，每次结算给自身回蓝
+            target_id = self.data.get("target_id")
+            target = None
+            for candidate in get_targetables(game_state):
+                if id(candidate) == target_id and candidate.alive:
+                    target = candidate
+                    break
+            if target is None or not target.alive or self.owner is None or not getattr(self.owner, "alive", False):
+                self.alive = False
+                return
+            self.pos = pygame.Vector2(target.pos)
+            schedule = self.data.get("damage_schedule", (30.0, 40.0, 50.0))
+            step = int(min(len(schedule), self.timer // 1.0))
+            done = int(self.data.get("ticks_done", 0))
+            while done < step:
+                done += 1
+                if done <= len(schedule):
+                    target.take_damage(
+                        float(schedule[done - 1]),
+                        source=self.owner,
+                        damage_type="design_spell_laze",
+                        game_state=game_state,
+                    )
+                    if self.owner is not None and getattr(self.owner, "alive", False):
+                        self.owner.gain_mp(getattr(self.owner, "max_hp", 1000.0) * self.data.get("mp_gain_ratio", LAZE_MP_GAIN_RATIO), "laze_hit")
+                    game_state["beam_events"].append(BeamEvent(self.owner.pos, target.pos, LAZE_CORE_COLOR))
+                    spawn_attack_impact(game_state, target.pos, LAZE_COLOR, radius=10, thickness=2, burst_count=6)
+            self.data["ticks_done"] = done
+            if self.lifetime <= 0:
+                self.alive = False
+        elif self.effect_type == "pierce_ray":
+            # 贯穿激光：慢速转向跟随最近敌人，每秒对激光命中敌人造成 40 法伤 + 削减 1% 法抗
+            owner = self.owner
+            if owner is None or not getattr(owner, "alive", False):
+                self.alive = False
+                return
+            # 慢速转向最近敌人（转角速度限制）
+            nearest = select_nearest_enemy(owner, game_state["characters"])
+            if nearest is not None:
+                desired = nearest.pos - owner.pos
+                if desired.length_squared() > 0.001:
+                    desired = desired.normalize()
+                    current = self.direction
+                    max_turn = self.data.get("turn_speed", RAY_TURN_SPEED) * dt
+                    # 计算当前方向与期望方向夹角，一帧内最多转过 max_turn 弧度
+                    cross = current.x * desired.y - current.y * desired.x
+                    dot = clamp(current.x * desired.x + current.y * desired.y, -1.0, 1.0)
+                    angle_diff = math.acos(dot)
+                    if angle_diff > 1e-4:
+                        turn = min(angle_diff, max_turn)
+                        sign = 1.0 if cross >= 0 else -1.0
+                        self.direction = current.rotate(math.degrees(sign * turn))
+            # 每秒结算一次（每秒 40 法伤 + 每秒 -1% 法抗）
+            self.data["tick_acc"] = self.data.get("tick_acc", 0.0) + dt
+            if self.data["tick_acc"] >= 1.0:
+                self.data["tick_acc"] -= 1.0
+                start_pos = self.pos - self.direction * 750.0
+                end_pos = self.pos + self.direction * 750.0
+                beam_hit = False
+                for victim in get_targetables(game_state):
+                    if not victim.alive or victim.owner_id == self.owner_id:
+                        continue
+                    dist_to_ray = distance_point_to_segment(victim.pos, start_pos, end_pos)
+                    if dist_to_ray <= victim.radius + self.radius:
+                        victim.take_damage(float(self.data.get("dps", RAY_DPS)), source=owner, damage_type="design_spell_pierce_ray", game_state=game_state)
+                        if hasattr(victim, "apply_laser_resist_penalty"):
+                            victim.apply_laser_resist_penalty(self.data.get("resist_step", RAY_RESIST_STEP), self.lifetime)
+                        beam_hit = True
+                if beam_hit:
+                    spawn_attack_impact(game_state, start_pos + (end_pos - start_pos) * 0.3, RAY_COLOR, radius=16, thickness=3, burst_count=6)
+            if self.lifetime <= 0:
+                self.alive = False
         elif self.effect_type == "swamp":
             self.affect_targets(
                 game_state,
@@ -2213,6 +2286,36 @@ class DesignEffect:
                 for i in range(3):
                     tail_p = self.pos + flow_dir * (6 + i * 7)
                     pygame.draw.circle(overlay, (*CHARGE_GOLD, max(24, 120 - i * 34)), (round(tail_p.x), round(tail_p.y)), max(1, 2 - i // 2))
+        elif self.effect_type == "laze":
+            # 激光滋人：从充能师到目标的细激光束（红芯 + 白炽描边）
+            owner = self.owner
+            if owner is not None and getattr(owner, "alive", False):
+                start = (round(owner.pos.x), round(owner.pos.y))
+                end = (round(self.pos.x), round(self.pos.y))
+                pulse = 0.7 + 0.3 * math.sin(self.timer * 20.0)
+                pygame.draw.line(overlay, (*LAZE_COLOR, int(150 * pulse)), start, end, 7)
+                pygame.draw.line(overlay, (*LAZE_CORE_COLOR, int(235 * pulse)), start, end, 3)
+        elif self.effect_type == "pierce_ray":
+            # 贯穿激光：宽 50 的粗光束（红晕外层 + 白炽内核），贯穿全场
+            owner = self.owner
+            if owner is not None and getattr(owner, "alive", False):
+                start_pos = self.pos - self.direction * 750.0
+                end_pos = self.pos + self.direction * 750.0
+                perp = pygame.Vector2(-self.direction.y, self.direction.x)
+                half = RAY_WIDTH / 2.0
+                pulse = 0.85 + 0.15 * math.sin(self.timer * 14.0)
+                outer_color = (*RAY_COLOR, int(70 * pulse))
+                inner_color = (*RAY_CORE_COLOR, int(180 * pulse))
+                poly = [
+                    (round(start_pos.x + perp.x * half), round(start_pos.y + perp.y * half)),
+                    (round(end_pos.x + perp.x * half), round(end_pos.y + perp.y * half)),
+                    (round(end_pos.x), round(end_pos.y)),
+                    (round(end_pos.x - perp.x * half), round(end_pos.y - perp.y * half)),
+                    (round(start_pos.x - perp.x * half), round(start_pos.y - perp.y * half)),
+                ]
+                pygame.draw.polygon(overlay, outer_color, poly)
+                pygame.draw.line(overlay, inner_color, (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 5)
+                pygame.draw.line(overlay, (*LAZE_CORE_COLOR, int(90 * pulse)), (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 10)
         elif self.effect_type == "meteor":
             pygame.draw.circle(overlay, (255, 180, 110, 70), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (255, 220, 160, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -2932,6 +3035,25 @@ def fire_design_basic_attack(attacker, target, game_state):
     if getattr(attacker, "design_sparrow_host_id", None) is not None:
         return  # 雀影附着中不普攻
     if target is None or not target.alive:
+        return
+    if role_num == 128:
+        # 聚光使被动【激光滋人】：普攻替换为锁定目标照射 3 秒的激光（逐秒 30/40/50 法伤），攻击间隔 6 秒
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "laze",
+                attacker,
+                pygame.Vector2(target.pos),
+                radius=LAZE_CORE_WIDTH,
+                lifetime=LAZE_DURATION,
+                target_id=id(target),
+                damage_schedule=LAZE_DAMAGES,
+                mp_gain_ratio=LAZE_MP_GAIN_RATIO,
+            ),
+        )
+        game_state["beam_events"].append(BeamEvent(attacker.pos, target.pos, LAZE_CORE_COLOR))
+        attacker.attack_cooldown = LAZE_INTERVAL
+        attacker.on_attack_committed()
         return
     if role_num == 91 and getattr(attacker, "phantom_lancer_spear_charges", 0) > 0:
         # 枪意突刺（冷锋枪化为 3 层枪意，普攻变为短距冲刺突刺）
@@ -4034,6 +4156,31 @@ def cast_design_skill(caster, game_state, token=None):
                     start_pos=pygame.Vector2(target.pos),
                 ),
             )
+    elif token == "pierce_ray":
+        # 聚光使【贯穿激光】：朝最近敌人方向发射宽 50 全场激光，持续 5 秒
+        target = select_nearest_enemy(caster, game_state["characters"])
+        direction = pygame.Vector2(1, 0)
+        if target is not None:
+            offset = target.pos - caster.pos
+            if offset.length_squared() > 0:
+                direction = offset.normalize()
+        elif caster.recent_move_dir.length_squared() > 0:
+            direction = caster.recent_move_dir.normalize()
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "pierce_ray",
+                caster,
+                pygame.Vector2(caster.pos),
+                lifetime=RAY_DURATION,
+                radius=RAY_WIDTH / 2.0,
+                direction=pygame.Vector2(direction),
+                dps=RAY_DPS,
+                resist_step=RAY_RESIST_STEP,
+                turn_speed=RAY_TURN_SPEED,
+            ),
+        )
+        game_state["beam_events"].append(BeamEvent(caster.pos, caster.pos + direction * 1200, RAY_COLOR))
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)

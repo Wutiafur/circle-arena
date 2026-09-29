@@ -402,6 +402,9 @@ class Character:
         self.design_overload_timer = 0.0
         self.design_overload_tick = 0.0
         self.design_drain_stash = 0.0
+        # 128 聚光使：贯穿激光法抗削减（累计、结束恢复）
+        self.design_ray_resist_timer = 0.0
+        self.design_ray_resist_total = 0.0
         self.gravekeeper_rot_stacks = 0
         self.gravekeeper_rot_timer = 0.0
         self.design_xuan_bulwark_timer = 0.0
@@ -559,6 +562,14 @@ class Character:
         self.physical_resistance = max(0.0, self.physical_resistance - amount)
         self.spell_resistance = max(0.0, self.spell_resistance - amount)
         self.equilibrium_resistance_penalty_timer = max(self.equilibrium_resistance_penalty_timer, duration)
+
+    def apply_laser_resist_penalty(self, amount=RAY_RESIST_STEP, duration=RAY_DURATION):
+        """聚光使【贯穿激光】：累计削减法术抗性，激光结束后统一恢复。"""
+        if amount <= 0:
+            return
+        self.design_ray_resist_total = getattr(self, "design_ray_resist_total", 0.0) + amount
+        self.spell_resistance = max(0.0, self.spell_resistance - amount)
+        self.design_ray_resist_timer = max(getattr(self, "design_ray_resist_timer", 0.0), duration)
 
     def spawn_sea_fish(self, game_state, anchor=None):
         if not self.is_sea_sage() or game_state is None:
@@ -4045,6 +4056,11 @@ class Character:
                 self.physical_resistance += self.equilibrium_resistance_penalty
                 self.spell_resistance += self.equilibrium_resistance_penalty
                 self.equilibrium_resistance_penalty = 0.0
+        if self.design_ray_resist_timer > 0:
+            self.design_ray_resist_timer = max(0.0, self.design_ray_resist_timer - dt)
+            if self.design_ray_resist_timer == 0 and self.design_ray_resist_total > 0:
+                self.spell_resistance += self.design_ray_resist_total
+                self.design_ray_resist_total = 0.0
         if self.is_sea_sage():
             self.sea_tide_pick_timer += dt
             while self.sea_tide_pick_timer >= SEA_SAGE_FISH_AUTO_INTERVAL:
