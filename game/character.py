@@ -5116,6 +5116,19 @@ class Character:
             for i in range(3):
                 pygame.draw.circle(surface, (238, 200, 90), (center[0], round(flame_y + i * 3)), 5 - i)
                 pygame.draw.circle(surface, (120, 60, 20), (center[0], round(flame_y + i * 3)), 5 - i, 1)
+        # 充能师：能量过载激活时头顶脉动金色充能核（呼吸缩放 + 弧形微光）
+        if self.job_name == CHARGE_MASTER_JOB_NAME and self.design_overload_timer > 0:
+            overload_pulse = 0.5 + 0.5 * math.sin(self.design_overload_timer * 10.0)
+            core_y = center[1] - self.radius - 13
+            core_r = round(5 + overload_pulse * 2)
+            pygame.draw.circle(surface, CHARGE_GOLD, (center[0], core_y), core_r)
+            pygame.draw.circle(surface, (255, 244, 190), (center[0], core_y), core_r, 1)
+            halo_r = round(9 + overload_pulse * 3)
+            pygame.draw.circle(surface, CHARGE_GOLD, (center[0], core_y), halo_r, 1)
+            # 上下两条弧形微光（能量脉冲残留）
+            for side_y, side_off in ((core_y - 4, 0), (core_y + 4, 0)):
+                pygame.draw.line(surface, (255, 238, 170), (center[0] - halo_r - 1, side_y - 1), (center[0] - 5, side_y - 1), 1)
+                pygame.draw.line(surface, (255, 238, 170), (center[0] + 5, side_y - 1), (center[0] + halo_r + 1, side_y - 1), 1)
         if self.is_dragon():
             form_color = DRAGON_THUNDER_COLOR if self.design_dragon_form == "thunder" else DRAGON_WOOD_COLOR
             pygame.draw.circle(surface, form_color, center, round(self.radius + 8), 2)
@@ -5272,6 +5285,10 @@ class Character:
             if prey is not None:
                 marker = label_font.render("猎", True, TIGER_HUNT_MARKER_COLOR)
                 surface.blit(marker, marker.get_rect(center=(round(prey.pos.x), round(prey.pos.y - prey.radius - 30))))
+        # 充能师过载受益者：头顶悬浮金色「充」字铭文（充能师本人已用充能核表示，不重复）
+        if self.job_name != CHARGE_MASTER_JOB_NAME and self.design_overload_timer > 0:
+            charge_mark = label_font.render("充", True, CHARGE_GOLD)
+            surface.blit(charge_mark, charge_mark.get_rect(center=(round(self.pos.x), round(self.pos.y - self.radius - 30))))
 
 
 

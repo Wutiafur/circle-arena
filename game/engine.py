@@ -1639,6 +1639,15 @@ class DesignEffect:
                     self.alive = False
                 else:
                     self.lifetime = SOUL_NINE_SLASH_DELAY
+        elif self.effect_type == "charge_siphon":
+            # 吸能流光（纯视觉）：金色光点从目标起沿直线飞向充能师，0.4 秒后消散
+            owner = self.owner
+            if owner is not None and getattr(owner, "alive", False):
+                start_vec = pygame.Vector2(self.data.get("start_pos", pygame.Vector2(self.pos)))
+                progress = clamp(self.timer / max(0.001, CHARGE_SIPHON_FX_DURATION), 0.0, 1.0)
+                self.pos = start_vec.lerp(owner.pos, progress)
+            if self.lifetime <= 0:
+                self.alive = False
         elif self.effect_type == "swamp":
             self.affect_targets(
                 game_state,
@@ -2188,6 +2197,22 @@ class DesignEffect:
             pulse = 0.5 + 0.5 * math.sin(self.timer * 24.0)
             center = (round(self.pos.x), round(self.pos.y))
             pygame.draw.circle(overlay, (*SOUL_SLASH_COLOR, int(90 + 90 * pulse)), center, round(6 + 6 * pulse))
+        elif self.effect_type == "charge_siphon":
+            # 吸能流光：飞行光点 + 累积拖尾（沿起点→充能师方向渐隐）
+            owner = self.owner
+            if owner is not None and getattr(owner, "alive", False):
+                start_vec = pygame.Vector2(self.data.get("start_pos", pygame.Vector2(self.pos)))
+                progress = clamp(self.timer / max(0.001, CHARGE_SIPHON_FX_DURATION), 0.0, 1.0)
+                flow = start_vec - owner.pos
+                flow_len = flow.length()
+                flow_dir = flow / flow_len if flow_len > 0.001 else pygame.Vector2(1, 0)
+                center = (round(self.pos.x), round(self.pos.y))
+                pygame.draw.circle(overlay, (*CHARGE_GOLD, 200), center, 3)
+                pygame.draw.circle(overlay, (255, 244, 190, 220), center, 1)
+                # 拖尾：往回 3 段渐隐小点
+                for i in range(3):
+                    tail_p = self.pos + flow_dir * (6 + i * 7)
+                    pygame.draw.circle(overlay, (*CHARGE_GOLD, max(24, 120 - i * 34)), (round(tail_p.x), round(tail_p.y)), max(1, 2 - i // 2))
         elif self.effect_type == "meteor":
             pygame.draw.circle(overlay, (255, 180, 110, 70), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (255, 220, 160, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -3997,6 +4022,18 @@ def cast_design_skill(caster, game_state, token=None):
             target.take_damage(CHARGE_DRAIN_DAMAGE, source=caster, damage_type="design_spell_charge_drain", game_state=game_state)
             game_state["beam_events"].append(BeamEvent(caster.pos, target.pos, CHARGE_GOLD))
             spawn_attack_impact(game_state, target.pos, CHARGE_GOLD, radius=13, thickness=3, burst_count=10)
+            # 吸能流光：0.4 秒金色光点从目标飞向充能师
+            add_design_effect(
+                game_state,
+                DesignEffect(
+                    "charge_siphon",
+                    caster,
+                    pygame.Vector2(target.pos),
+                    lifetime=CHARGE_SIPHON_FX_DURATION,
+                    target_id=id(target),
+                    start_pos=pygame.Vector2(target.pos),
+                ),
+            )
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)
