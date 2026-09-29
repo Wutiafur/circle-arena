@@ -2133,6 +2133,9 @@ class Character:
             return False
         if (self.pos - weapon_orb.pos).length() > self.radius + weapon_orb.radius:
             return False
+        # 冷锋枪是绝影枪客的专属武器：仅绝影枪客可拾取，其他角色无法捡起
+        if weapon_orb.weapon_id == "ColdSpear" and self.job_name != PHANTOM_LANCER_JOB_NAME:
+            return False
         weapon_def = WEAPON_DEFS[weapon_orb.weapon_id]
         self.held_weapon = {
             "weapon_id": weapon_orb.weapon_id,
