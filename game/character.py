@@ -2129,7 +2129,12 @@ class Character:
         self.root_timer = max(self.root_timer, duration)
 
     def try_pickup_weapon(self, weapon_orb):
-        if not self.alive or self.held_weapon is not None or not weapon_orb.alive or not self.can_pick_up_weapons():
+        if not self.alive or not weapon_orb.alive or not self.can_pick_up_weapons():
+            return False
+        # 冷锋枪是绝影枪客的专属武器：绝影枪客拾取时不受「已持有武器」限制（立即化为枪意替换当前武器），
+        # 其他角色不可拾取；普通武器仍需在未持有武器时才能拾取
+        is_lancer_spear = weapon_orb.weapon_id == "ColdSpear" and self.job_name == PHANTOM_LANCER_JOB_NAME
+        if self.held_weapon is not None and not is_lancer_spear:
             return False
         if (self.pos - weapon_orb.pos).length() > self.radius + weapon_orb.radius:
             return False
@@ -3026,7 +3031,14 @@ class Character:
         available_orbs = [orb for orb in game_state["weapon_orbs"] if orb.alive]
         if not available_orbs:
             return None
-        if self.job_name == "DesignRole91_phantom_lancer" and self.phantom_lancer_spear_hunt_timer > 0:
+        is_lancer = self.job_name == PHANTOM_LANCER_JOB_NAME
+        # 绝影枪客已持武器时只对专属冷锋枪感兴趣（换枪意），不会去捡普通武器
+        if is_lancer and self.held_weapon is not None:
+            spear_orbs = [orb for orb in available_orbs if orb.weapon_id == "ColdSpear"]
+            if spear_orbs:
+                return min(spear_orbs, key=lambda orb: (orb.pos - self.pos).length_squared())
+            return None
+        if is_lancer and self.phantom_lancer_spear_hunt_timer > 0:
             spear_orbs = [orb for orb in available_orbs if orb.weapon_id == "ColdSpear"]
             if spear_orbs:
                 return min(spear_orbs, key=lambda orb: (orb.pos - self.pos).length_squared())
@@ -4631,7 +4643,13 @@ class Character:
             return
 
         target = self.get_target(game_state)
-        weapon_orb_target = self.get_nearest_weapon_orb(game_state) if self.held_weapon is None else None
+        if self.held_weapon is None:
+            weapon_orb_target = self.get_nearest_weapon_orb(game_state)
+        elif self.job_name == PHANTOM_LANCER_JOB_NAME and self.phantom_lancer_spear_hunt_timer > 0:
+            # 绝影枪客已持普通武器时仍可去拾取专属冷锋枪（化为枪意替换）
+            weapon_orb_target = self.get_nearest_weapon_orb(game_state)
+        else:
+            weapon_orb_target = None
         desired = pygame.Vector2(self.wander_dir)
         current_range = self.get_current_attack_range()
         current_attack_type = self.get_current_basic_attack_type()
