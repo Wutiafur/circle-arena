@@ -4157,18 +4157,16 @@ def cast_design_skill(caster, game_state, token=None):
                 ),
             )
     elif token == "pierce_ray":
-        # 聚光使【贯穿激光】：朝最近敌人方向发射宽 50 全场激光，持续 5 秒；
-        # 引导期间角色定身且不能再次释放主动技能
+        # 聚光使【贯穿激光】：从角色面向方向发射宽 50 全场激光，持续 5 秒；
+        # 引导期间角色定身、不回复 MP 且不能再次释放主动技能
         if getattr(caster, "design_ray_channel_timer", 0.0) > 0:
             return False
-        target = select_nearest_enemy(caster, game_state["characters"])
-        direction = pygame.Vector2(1, 0)
-        if target is not None:
-            offset = target.pos - caster.pos
-            if offset.length_squared() > 0:
-                direction = offset.normalize()
-        elif caster.recent_move_dir.length_squared() > 0:
-            direction = caster.recent_move_dir.normalize()
+        # 初始方向 = 角色当前面向（facing_angle），而非直接瞄准最近敌人
+        face_rad = math.radians(getattr(caster, "facing_angle", 0.0))
+        direction = pygame.Vector2(math.cos(face_rad), math.sin(face_rad))
+        if direction.length_squared() < 0.01:
+            direction = pygame.Vector2(caster.recent_move_dir) if caster.recent_move_dir.length_squared() > 0.01 else pygame.Vector2(1, 0)
+        direction = direction.normalize()
         add_design_effect(
             game_state,
             DesignEffect(

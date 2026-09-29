@@ -2098,6 +2098,9 @@ class Character:
             return
         if self.design_banished:
             return
+        # 聚光使【贯穿激光】引导期间：不回复 MP（被动充能/激光滋人回蓝均被阻止）
+        if self.job_name == LIGHTWEAVER_JOB_NAME and getattr(self, "design_ray_channel_timer", 0.0) > 0:
+            return
         # 充能师被动【能量过载】：期间同队充能效率 +50%（每获得 1 点 MP 额外 +0.5）
         if getattr(self, "design_overload_timer", 0.0) > 0:
             amount *= CHARGE_OVERLOAD_MP_MULT
