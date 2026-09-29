@@ -3986,6 +3986,17 @@ def cast_design_skill(caster, game_state, token=None):
                 blade_id=id(blade),
             ),
         )
+    elif token == "charge_drain":
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is not None and target.alive:
+            target_mp = max(0.0, float(getattr(target, "mp", 0.0)))
+            # 能量强夺：削减 15% 当前 MP + 12 法伤；转化 5% 目标当前 MP 存入 stash，
+            # 待 cast_skill 技能消耗(mp=0)后在下一帧 update 注入自身，避免被归零抹掉
+            target.mp = max(0.0, target_mp - target_mp * CHARGE_DRAIN_MP_RATIO)
+            caster.design_drain_stash = getattr(caster, "design_drain_stash", 0.0) + target_mp * CHARGE_DRAIN_SELF_MP_RATIO
+            target.take_damage(CHARGE_DRAIN_DAMAGE, source=caster, damage_type="design_spell_charge_drain", game_state=game_state)
+            game_state["beam_events"].append(BeamEvent(caster.pos, target.pos, CHARGE_GOLD))
+            spawn_attack_impact(game_state, target.pos, CHARGE_GOLD, radius=13, thickness=3, burst_count=10)
     elif token == "phantom_lancer_throw":
         target = select_nearest_enemy(caster, game_state["characters"])
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else pygame.Vector2(1, 0)

@@ -398,6 +398,10 @@ class Character:
         self.design_shell_hit_counter = 0
         self.design_shell_guard_cooldown = 0.0
         self.design_shell_counter_timer = 0.0
+        # 127 充能师
+        self.design_overload_timer = 0.0
+        self.design_overload_tick = 0.0
+        self.design_drain_stash = 0.0
         self.gravekeeper_rot_stacks = 0
         self.gravekeeper_rot_timer = 0.0
         self.design_xuan_bulwark_timer = 0.0
@@ -1719,6 +1723,19 @@ class Character:
             self.prelate_wrap_pending = False
             self.unwrap_packaging(game_state)
 
+    def update_chargemaster(self, dt, game_state):
+        """充能师：周期性触发【能量过载】——同队角色充能效率 +50% 持续 4 秒。（timer 递减在 update 通用区）"""
+        if self.job_name != CHARGE_MASTER_JOB_NAME:
+            return
+        if game_state is None:
+            return
+        self.design_overload_tick -= dt
+        if self.design_overload_tick <= 0:
+            self.design_overload_tick += CHARGE_OVERLOAD_INTERVAL
+            for ally in game_state.get("characters", []):
+                if ally.alive and ally.owner_id == self.owner_id:
+                    ally.design_overload_timer = max(getattr(ally, "design_overload_timer", 0.0), CHARGE_OVERLOAD_DURATION)
+
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
             return
@@ -2069,6 +2086,9 @@ class Character:
             return
         if self.design_banished:
             return
+        # 充能师被动【能量过载】：期间同队充能效率 +50%（每获得 1 点 MP 额外 +0.5）
+        if getattr(self, "design_overload_timer", 0.0) > 0:
+            amount *= CHARGE_OVERLOAD_MP_MULT
         self.mp = clamp(self.mp + amount, 0.0, MAX_MP)
 
     def apply_slow(self, amount, duration):
@@ -4544,7 +4564,13 @@ class Character:
         self.update_loyal_guard(dt, game_state)
         self.update_grudge_blade(dt, game_state)
         self.update_prelate(dt, game_state)
+        self.update_chargemaster(dt, game_state)
         self.update_soul_blade(dt, game_state)
+        if self.design_overload_timer > 0:
+            self.design_overload_timer = max(0.0, self.design_overload_timer - dt)
+        if self.design_drain_stash > 0:
+            self.gain_mp(self.design_drain_stash, "charge_drain_stash")
+            self.design_drain_stash = 0.0
         if self.design_sparrow_host_id is not None:
             self.update_sparrow_host(dt, game_state)
             return
