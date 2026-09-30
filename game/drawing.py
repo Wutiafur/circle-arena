@@ -242,6 +242,14 @@ def build_pokedex_detail_surface(detail_panel, data, subtitle_font, body_font, s
         (POKEDEX_UI_TEXT["labels"]["mp_charge"], data["display_mp_charge_style"]),
         (POKEDEX_UI_TEXT["labels"]["skill"], data["display_skill_name"]),
     ]
+    # 绝影枪客【追风之触】：普攻伤害 = 基础 + (移速/100 - 1)×60，图鉴标注当前移速下的实际普攻
+    if job_name == PHANTOM_LANCER_JOB_NAME:
+        speed_ratio = float(data["move_speed"]) / 100.0
+        wind_bonus = max(0.0, speed_ratio - 1.0) * 60.0
+        details[3] = (
+            POKEDEX_UI_TEXT["labels"]["attack_damage"],
+            f"{data['attack_damage']:g}（追风+{wind_bonus:.0f}={data['attack_damage'] + wind_bonus:.0f}）",
+        )
     if passive_name:
         details.append((POKEDEX_UI_TEXT["labels"]["passive"], passive_name))
     win_rows = []
