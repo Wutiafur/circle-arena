@@ -2516,6 +2516,8 @@ class DesignSummon(_TargetableProps):
             self.projectile_speed = 0.0
             self.attack_range = 24.0
             self.attack_damage_kind = DAMAGE_KIND_PHYSICAL
+            # 出生短暂无敌：0.5 秒内免疫伤害（避免出生即被敌人普攻秒杀）
+            self.spawn_grace_timer = LARVA_SPAWN_GRACE
         self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
         self.update_rect()
 
@@ -2534,6 +2536,9 @@ class DesignSummon(_TargetableProps):
         ignore_equilibrium_thresholds=False,
     ):
         if not self.alive or amount <= 0:
+            return 0.0
+        # 出生短暂无敌：幼虫 0.5 秒内免疫所有伤害
+        if getattr(self, "spawn_grace_timer", 0.0) > 0:
             return 0.0
         if self.summon_type == "soul_blade":
             blade_amount = amount
@@ -2594,6 +2599,8 @@ class DesignSummon(_TargetableProps):
             if self.summon_type == "wolf" and self.owner is not None and hasattr(self.owner, "design_wolf_cd_timer"):
                 self.owner.design_wolf_cd_timer = max(self.owner.design_wolf_cd_timer, BEASTMASTER_WOLF_DEATH_CD)
             return
+        if getattr(self, "spawn_grace_timer", 0.0) > 0:
+            self.spawn_grace_timer = max(0.0, self.spawn_grace_timer - dt)
         self.attack_cooldown = max(0.0, self.attack_cooldown - dt)
         if self.summon_type == "spirit":
             target = select_nearest_targetable(self, game_state)
