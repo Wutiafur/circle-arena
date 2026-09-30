@@ -2511,7 +2511,8 @@ class DesignSummon(_TargetableProps):
             self.speed = 150.0
             self.lifetime = DESIGN_LARVA_DURATION
             self.attack_type = "melee"
-            self.attack_interval = 1.0
+            self.attack_interval = 2.0
+            self.attack_cooldown = 2.0
             self.projectile_speed = 0.0
             self.attack_range = 24.0
             self.attack_damage_kind = DAMAGE_KIND_PHYSICAL

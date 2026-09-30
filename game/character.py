@@ -2893,8 +2893,7 @@ class Character:
                         game_state=game_state,
                     )
         if damage >= 15 and self.job_name == "DesignRole84_hive_mind" and game_state is not None:
-            for _ in range(3):
-                game_state["design_summons"].append(DesignSummon(self, "larva", self.pos + random_unit_vector() * 12))
+            game_state["design_summons"].append(DesignSummon(self, "larva", self.pos + random_unit_vector() * 12))
         if damage > 0 and self.job_name == "DesignRole72_soul_eater":
             self.max_hp += 2.0
             self.hp = min(self.max_hp, self.hp + 5.0)
