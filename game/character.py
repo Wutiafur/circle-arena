@@ -331,6 +331,7 @@ class Character:
         self.design_recent_damage_taken = 0.0
         self.design_has_revived = False
         self.design_low_hp_triggered = False
+        self.design_hive_damage_accum = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -2892,8 +2893,13 @@ class Character:
                         damage_type="true_dark_reflect",
                         game_state=game_state,
                     )
-        if damage >= 15 and self.job_name == "DesignRole84_hive_mind" and game_state is not None:
-            game_state["design_summons"].append(DesignSummon(self, "larva", self.pos + random_unit_vector() * 12))
+        if self.job_name == "DesignRole84_hive_mind" and game_state is not None and damage > 0:
+            # 寄生幼虫：累计受伤每达到 15 点出 3 只小虫（触发后累计清零重新计）
+            self.design_hive_damage_accum += damage
+            while self.design_hive_damage_accum >= 15:
+                self.design_hive_damage_accum -= 15
+                for _ in range(3):
+                    game_state["design_summons"].append(DesignSummon(self, "larva", self.pos + random_unit_vector() * 12))
         if damage > 0 and self.job_name == "DesignRole72_soul_eater":
             self.max_hp += 2.0
             self.hp = min(self.max_hp, self.hp + 5.0)
