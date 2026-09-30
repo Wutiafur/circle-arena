@@ -2269,6 +2269,7 @@ class Character:
         count_on_damage_dealt=True,
         ignore_shields=False,
         ignore_equilibrium_thresholds=False,
+        ignore_physical_resistance=False,
     ):
         if not self.alive or amount <= 0:
             return 0.0
@@ -2456,7 +2457,9 @@ class Character:
         if self.job_name == "DesignRole69_ironclad":
             damage = min(damage, self.max_hp * DESIGN_IRONCLAD_HIT_CAP)
         if damage_kind == DAMAGE_KIND_PHYSICAL:
-            damage *= self.physical_resistance
+            if not ignore_physical_resistance:
+                damage *= self.physical_resistance
+            # ignore_physical_resistance=True：无视物理抵抗，默认按物理抵抗 1（全额结算）
             if self.is_windstorm_fox() and self.windstorm_physical_resistance_bonus > 0:
                 damage *= max(0.0, 1.0 - self.windstorm_physical_resistance_bonus)
             if self.thunder_resist_timer > 0:

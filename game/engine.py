@@ -3069,8 +3069,8 @@ def fire_design_basic_attack(attacker, target, game_state):
         attacker.update_rect()
         game_state["melee_effects"].append(MeleeSwingEffect(start_pos, attacker.pos + direction * (target.radius + 10), attacker.get_visual_color()))
         game_state["beam_events"].append(BeamEvent(start_pos, attacker.pos, (86, 224, 232)))
-        thrust_damage = attacker.get_current_basic_damage() * 2.0 * attacker.get_target_attack_bonus(target)
-        dealt = target.take_damage(thrust_damage, source=attacker, damage_type="basic_melee", game_state=game_state)
+        thrust_damage = attacker.get_current_basic_damage() * 0.8 * attacker.get_target_attack_bonus(target)
+        dealt = target.take_damage(thrust_damage, source=attacker, damage_type="basic_melee", game_state=game_state, ignore_physical_resistance=True)
         if dealt > 0:
             spawn_attack_impact(game_state, target.pos, (86, 224, 232), radius=12, thickness=2, burst_count=6)
             attacker.heal(40.0)

@@ -453,7 +453,7 @@ BLOODWRAITH_RAGE_ATTACK_SPEED_MULTIPLIER = 3.0
 BLOODWRAITH_RAGE_DAMAGE_MULTIPLIER = 4.0
 BLOODWRAITH_RAGE_SPEED_MULTIPLIER = 2.0
 PHANTOM_LANCER_THROW_SPEED_BONUS = 0.30
-PHANTOM_LANCER_THROW_SPEED_DURATION = 4.0
+PHANTOM_LANCER_THROW_SPEED_DURATION = 5.0
 PHANTOM_LANCER_SPEAR_LIFETIME = 5.0
 PHANTOM_LANCER_SPEAR_HUNT_DURATION = 5.0
 SOUL_ARBITER_CHAIN_DURATION = 3.0
@@ -2750,13 +2750,13 @@ CHARACTER_DATA[PHANTOM_LANCER_JOB_NAME] = {
     "spell_resistance": 0.8,
     "mp_charge_style": "Gain 20% MP per 20 distance moved",
     "skill_name": "Wind-Touch / Lance Throw",
-    "skill_description": "Attack power scales with movement speed. Picking up Cold Spear grants 3 spear-charge thrusts (200% damage + 40 HP heal + 30% speed). While moving, takes 12% less damage. The active throws Cold Spear for 30 damage, slowing the target 30% for 2 seconds.",
+    "skill_description": "Attack power scales with movement speed. Picking up Cold Spear grants 3 spear-charge thrusts (80% damage ignoring physical resistance + 40 HP heal + 30% speed). While moving, takes 12% less damage. The active throws Cold Spear for 30 damage, slowing the target 30% for 2 seconds.",
 }
 POKEDEX_LOCALIZATION[PHANTOM_LANCER_JOB_NAME] = {
     "name": "绝影枪客",
     "mp_charge_style": "每移动 20 距离充能 20%",
     "skill_name": "追风之触 / 掷枪入阵",
-    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】获得 3 层枪意：每次普攻变为短距突刺（200% 伤害 + 回 40 血 + 5 秒 +30% 移速）。移动中受到的伤害 -12%。主动技能向当前目标掷出【冷锋枪】，造成 30 点伤害并使其减速 30% 持续 2 秒，长枪插地持续 5 秒。",
+    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】获得 3 层枪意：每次普攻变为短距突刺（80% 物理伤害、无视物理抵抗按物抗 1 计算 + 回 40 血 + 5 秒 +30% 移速）。移动中受到的伤害 -12%。主动技能向当前目标掷出【冷锋枪】，造成 30 点伤害并使其减速 30% 持续 2 秒，长枪插地持续 5 秒。",
 }
 DESIGN_ROLE_METADATA[PHANTOM_LANCER_JOB_NAME] = {
     "role_num": 91,
@@ -2766,7 +2766,7 @@ DESIGN_ROLE_METADATA[PHANTOM_LANCER_JOB_NAME] = {
     "attack_text": "长枪挥击，物理近战，伤害 16",
     "mp_text": "移动距离充能",
     "skill_name": "追风之触 / 掷枪入阵",
-    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】后，下一次普攻会变为短距离突刺，造成 200% 伤害并回复 40 点生命值，同时自身 5 秒内移速提升 30%。主动技能会向当前目标身后掷出【冷锋枪】，命中造成 15 点伤害并插在地面持续 5 秒。",
+    "skill_description": "自身移速越高，普攻伤害越高。拾取【冷锋枪】后，下一次普攻会变为短距离突刺，造成 80% 物理伤害（无视物理抵抗，按物抗 1 结算）并回复 40 点生命值，同时自身 5 秒内移速提升 30%。主动技能会向当前目标身后掷出【冷锋枪】，命中造成 15 点伤害并插在地面持续 5 秒。",
     "basic_damage_kind": "physical",
     "skill_token": "phantom_lancer_throw",
 }
