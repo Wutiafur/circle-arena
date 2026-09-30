@@ -769,6 +769,13 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
                 for index, character in enumerate(gs["characters"]):
                     for other in gs["characters"][index + 1 :]:
                         character.resolve_overlap(other)
+                # 武器拾取（与 battle_loop 同款）：擂台赛也能拾取插地的冷锋枪等实体武器
+                for orb in gs["weapon_orbs"]:
+                    if not orb.alive:
+                        continue
+                    for character in gs["characters"]:
+                        if character.alive and character.try_pickup_weapon(orb):
+                            break
                 update_world_lists(gs, dt)
                 gs["characters"] = [c for c in gs["characters"] if c.alive]
 
