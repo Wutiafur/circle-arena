@@ -2684,8 +2684,7 @@ class DesignSummon(_TargetableProps):
                 if self.summon_type == "wolf" and random.random() < 0.25 and hasattr(target, "apply_bleed"):
                     target.apply_bleed(1)
                 self.attack_cooldown = max(0.1, float(getattr(self, "attack_interval", 1.0)))
-                if self.summon_type == "larva":
-                    self.alive = False
+                # 幼虫不再攻击后自毁：持续作战直到被击杀 / 寿命到期 / 主动【虫群风暴】引爆
         else:
             desired_distance = max(70.0, self.attack_range * 0.6)
             if distance > desired_distance:
