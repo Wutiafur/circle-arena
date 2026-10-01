@@ -1721,6 +1721,14 @@ class DesignEffect:
                     spawn_attack_impact(game_state, start_pos + (end_pos - start_pos) * 0.3, RAY_COLOR, radius=16, thickness=3, burst_count=6)
             if self.lifetime <= 0:
                 self.alive = False
+        elif self.effect_type == "ghost_ship":
+            # 幽灵船（纯视觉）：跟随方向保持，寿命结束自动消散
+            if self.lifetime <= 0:
+                self.alive = False
+        elif self.effect_type == "ghost_sailor_summon":
+            # 水手召唤光（纯视觉）：0.9 秒后消散
+            if self.lifetime <= 0:
+                self.alive = False
         elif self.effect_type == "swamp":
             self.affect_targets(
                 game_state,
@@ -2316,6 +2324,54 @@ class DesignEffect:
                 pygame.draw.polygon(overlay, outer_color, poly)
                 pygame.draw.line(overlay, inner_color, (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 5)
                 pygame.draw.line(overlay, (*LAZE_CORE_COLOR, int(90 * pulse)), (round(start_pos.x), round(start_pos.y)), (round(end_pos.x), round(end_pos.y)), 10)
+        elif self.effect_type == "ghost_ship":
+            # 幽灵船：半透明幽灵青船体（船底弧+船帮+桅杆），朝向 direction
+            ship_direction = self.direction if self.direction.length_squared() > 0 else pygame.Vector2(1, 0)
+            ship_direction = ship_direction.normalize()
+            perp_vec = pygame.Vector2(-ship_direction.y, ship_direction.x)
+            half_len = GHOST_SHIP_LEN * 0.5
+            hull_half = 9.0
+            pos_v = pygame.Vector2(self.pos)
+            bow = pos_v + ship_direction * half_len
+            stern = pos_v - ship_direction * half_len
+            # 船底弧（用线段多边形轮廓）
+            hull_alpha = GHOST_SHIP_ALPHA
+            ship_color = (*GHOST_SHIP_COLOR, hull_alpha)
+            # 船帮（侧舷）上半部分：梯形
+            side_points = [
+                (round(stern.x + perp_vec.x * hull_half), round(stern.y + perp_vec.y * hull_half)),
+                (round(bow.x + perp_vec.x * hull_half), round(bow.y + perp_vec.y * hull_half)),
+                (round(bow.x - perp_vec.x * hull_half * 0.6), round(bow.y - perp_vec.y * hull_half * 0.6)),
+                (round(stern.x - perp_vec.x * hull_half), round(stern.y - perp_vec.y * hull_half)),
+            ]
+            pygame.draw.polygon(overlay, ship_color, side_points)
+            # 船底（下方弧线）
+            arc_rect = pygame.Rect(0, 0, round(GHOST_SHIP_LEN), round(hull_half * 2))
+            arc_rect.center = (round(pos_v.x), round(pos_v.y) + 6)
+            pygame.draw.arc(overlay, (*GHOST_SHIP_COLOR, min(255, hull_alpha + 40)), arc_rect, 0.0, math.pi, 2)
+            # 桅杆 + 帆（中心竖线 + 顶部小三角）
+            mast_top = pos_v - ship_direction * (half_len * 0.1) + perp_vec * (hull_half + 14.0)
+            mast_base = pos_v - ship_direction * (half_len * 0.1) + perp_vec * hull_half
+            pygame.draw.line(overlay, (*GHOST_SHIP_COLOR, min(255, hull_alpha + 30)), (round(mast_base.x), round(mast_base.y)), (round(mast_top.x), round(mast_top.y)), 2)
+            sail_tip = mast_top + perp_vec * 9.0
+            pygame.draw.polygon(
+                overlay,
+                (*GHOST_SHIP_COLOR, hull_alpha - 20),
+                [(round(mast_top.x), round(mast_top.y)), (round(sail_tip.x), round(sail_tip.y)), (round(mast_base.x + perp_vec.x * 3), round(mast_base.y + perp_vec.y * 3))],
+            )
+        elif self.effect_type == "ghost_sailor_summon":
+            # 水手召唤：幽绿扩散光环 + 两道水花升起点
+            pulse = clamp(self.timer / max(0.01, self.lifetime + self.timer), 0.0, 1.0)
+            alpha = int(160 * (1.0 - pulse))
+            ring_r = round(self.radius + pulse * 22.0)
+            center_fx = (round(self.pos.x), round(self.pos.y))
+            pygame.draw.circle(overlay, (*GHOST_SHIP_COLOR, max(20, alpha)), center_fx, ring_r, 2)
+            pygame.draw.circle(overlay, (116, 218, 142, max(16, alpha // 2)), center_fx, max(2, ring_r - 5), 1)
+            # 两缕向上水花
+            for side in (-1.0, 1.0):
+                base = pygame.Vector2(self.pos) + pygame.Vector2(side * 10.0, 4.0)
+                tip = base + pygame.Vector2(side * 3.0, -14.0)
+                pygame.draw.line(overlay, (116, 218, 142, max(24, alpha)), (round(base.x), round(base.y)), (round(tip.x), round(tip.y)), 2)
         elif self.effect_type == "meteor":
             pygame.draw.circle(overlay, (255, 180, 110, 70), (round(self.pos.x), round(self.pos.y)), round(self.radius))
             pygame.draw.circle(overlay, (255, 220, 160, 180), (round(self.pos.x), round(self.pos.y)), round(self.radius), 2)
@@ -4413,10 +4469,40 @@ def cast_design_skill(caster, game_state, token=None):
         if target is not None:
             add_design_effect(game_state, DesignEffect("pillar", caster, target.pos, radius=40.0, lifetime=5.0, dps=25.0, heal=10.0))
     elif token == "broadside":
+        # 幽灵船长【侧舷齐射】：生成半透明幽灵船，5 枚炮弹从船侧射出
         direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
         direction = direction.normalize()
-        for offset in (-18, -9, 0, 9, 18):
-            spawn_design_projectile(caster, game_state, direction.rotate(offset), 12.0, "design_physical_broadside", (196, 196, 196), max_range=240.0)
+        ship_pos = pygame.Vector2(caster.pos) + direction * GHOST_SHIP_OFFSET
+        add_design_effect(
+            game_state,
+            DesignEffect(
+                "ghost_ship",
+                caster,
+                ship_pos,
+                radius=GHOST_SHIP_LEN / 2.0,
+                lifetime=GHOST_SHIP_LIFETIME,
+                direction=pygame.Vector2(direction),
+            ),
+        )
+        # 炮弹从船的位置射出（扇形 5 发）
+        for offset_angle in (-18, -9, 0, 9, 18):
+            shot_dir = direction.rotate(offset_angle)
+            velocity = shot_dir * 320.0
+            start = ship_pos + shot_dir * (GHOST_SHIP_LEN * 0.28)
+            game_state["projectiles"].append(
+                Projectile(
+                    start,
+                    velocity,
+                    caster,
+                    12.0,
+                    (196, 196, 196),
+                    source_kind="design_physical_broadside",
+                    max_range=240.0,
+                )
+            )
+        # 炮口闪光 + 硝烟
+        spawn_attack_impact(game_state, ship_pos, (220, 224, 228), radius=16, thickness=3, burst_count=10)
+        spawn_attack_impact(game_state, ship_pos + direction * 30, (190, 198, 204), radius=10, thickness=2, burst_count=6)
     elif token == "gravity_field":
         target = select_nearest_enemy(caster, game_state["characters"])
         pos = target.pos if target is not None else caster.pos + caster.recent_move_dir * 80

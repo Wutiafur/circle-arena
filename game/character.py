@@ -2909,6 +2909,19 @@ class Character:
             self.design_low_hp_triggered = True
             for _ in range(2):
                 game_state["design_summons"].append(DesignSummon(self, "sailor", self.pos + random_unit_vector() * 20))
+            # 幽灵船长被动光效：残血召唤水手时周身幽绿光环 + 两道水花升起点
+            if game_state is not None:
+                add_design_effect(
+                    game_state,
+                    DesignEffect(
+                        "ghost_sailor_summon",
+                        self,
+                        pygame.Vector2(self.pos),
+                        radius=20.0,
+                        lifetime=0.9,
+                    ),
+                )
+                spawn_attack_impact(game_state, self.pos, (116, 218, 142), radius=22, thickness=3, burst_count=14)
         return damage
 
     def get_speed_modifier(self):
