@@ -5240,6 +5240,37 @@ class Character:
                 fill = bar_rect.copy()
                 fill.width = max(1, int(bar_rect.width * progress_ratio))
                 pygame.draw.rect(surface, BANISH_COLOR, fill, border_radius=2)
+        # 115 虚空放逐者【虚空惩戒】印记层数：未放逐时头顶显示 1/2/3 层紫菱，满层瞬间清零转放逐
+        if self.design_banish_mark > 0 and not self.design_banished:
+            mark_count = min(BANISH_MARKS_REQUIRED - 1, int(self.design_banish_mark))
+            for i in range(mark_count):
+                mark_x = center[0] - (mark_count - 1) * 6 + i * 12
+                mark_y = center[1] - self.radius - 32
+                pygame.draw.polygon(
+                    surface,
+                    BANISH_COLOR,
+                    [
+                        (mark_x, mark_y - 5),
+                        (mark_x + 4, mark_y),
+                        (mark_x, mark_y + 5),
+                        (mark_x - 4, mark_y),
+                    ],
+                )
+                pygame.draw.polygon(
+                    surface,
+                    (206, 170, 255),
+                    [
+                        (mark_x, mark_y - 5),
+                        (mark_x + 4, mark_y),
+                        (mark_x, mark_y + 5),
+                        (mark_x - 4, mark_y),
+                    ],
+                    1,
+                )
+            # 满层前最后 1 层时中心微光脉动（提醒即将放逐）
+            if self.design_banish_mark >= BANISH_MARKS_REQUIRED - 1:
+                last_pulse = 0.5 + 0.5 * math.sin(self.design_recently_hit * 10.0)
+                pygame.draw.circle(surface, (206, 170, 255, int(120 + 100 * last_pulse)), (center[0], center[1] - self.radius - 32), 8, 1)
         if self.design_corrupted_blood > 0:
             pygame.draw.circle(surface, SPARROW_COLOR, (center[0], center[1] - self.radius - 8), 3)
             pygame.draw.circle(surface, (255, 236, 210), (center[0], center[1] - self.radius - 8), 3, 1)

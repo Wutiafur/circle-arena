@@ -3739,6 +3739,8 @@ def cast_design_skill(caster, game_state, token=None):
         target = select_nearest_enemy(caster, game_state["characters"])
         if target is None:
             return False
+        # 虚空惩戒特效：暗紫光束从施法者射向目标（含命中闪烁）
+        game_state["beam_events"].append(BeamEvent(caster.pos, target.pos, BANISH_COLOR))
         dealt = target.take_damage(BANISH_SKILL_DAMAGE, source=caster, damage_type="design_spell_void_banish", game_state=game_state)
         if dealt > 0:
             target.design_banish_mark += 1
