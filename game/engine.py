@@ -4392,7 +4392,7 @@ def cast_design_skill(caster, game_state, token=None):
                 enemy.design_taunt_timer = max(enemy.design_taunt_timer, 3.0)
                 enemy.design_taunt_owner_id = caster.owner_id
     elif token == "monsoon":
-        game_state["global_rain_timer"] = 4.0
+        game_state["global_rain_timer"] = DESIGN_RAIN_DURATION
         game_state["global_rain_owner"] = caster.owner_id
         game_state["global_rain_tick"] = 0.0
     elif token == "arc_blade":

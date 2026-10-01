@@ -86,6 +86,7 @@ def create_game_state(player_count, timed_weapon_orb_drops_enabled=True):
         "global_rain_timer": 0.0,
         "global_rain_owner": None,
         "global_rain_tick": 0.0,
+        "rain_splashes": [],
         "last_design_skill_token": None,
         "weapon_orbs": weapon_orbs,
         "weapon_orb_target": WEAPON_ORB_TARGET if timed_weapon_orb_drops_enabled else 0,
@@ -137,8 +138,22 @@ def update_world_lists(game_state, dt):
                     if isinstance(target, Character):
                         target.apply_slow(0.3, 0.3)
                     target.take_damage(DESIGN_RAIN_DAMAGE, source=next((c for c in game_state["characters"] if c.owner_id == game_state["global_rain_owner"]), None), damage_type="design_spell_rain", game_state=game_state)
+        # 雨特效：斜雨丝（时间相位推进）+ 随机溅水花
+        rain_elapsed = DESIGN_RAIN_DURATION - game_state["global_rain_timer"]
+        game_state["rain_elapsed"] = rain_elapsed
+        splashes = game_state.get("rain_splashes", [])
+        for splash in splashes:
+            splash["t"] += dt
+        if len(splashes) < RAIN_SPLASH_COUNT and random.random() < 0.75:
+            splashes.append({
+                "x": random.uniform(ARENA_RECT.left + 8.0, ARENA_RECT.right - 8.0),
+                "y": random.uniform(ARENA_RECT.top + 6.0, ARENA_RECT.bottom - 6.0),
+                "t": 0.0,
+            })
+        game_state["rain_splashes"] = [s for s in splashes if s["t"] < RAIN_SPLASH_LIFETIME]
         if game_state["global_rain_timer"] == 0:
             game_state["global_rain_owner"] = None
+            game_state["rain_splashes"] = []
 
     for damage_text in game_state["damage_texts"]:
         damage_text.update(dt)
@@ -235,6 +250,29 @@ def draw_world(surface, game_state, label_font):
         attack_fx.draw(surface)
     for particle in game_state["spell_trail_particles"]:
         particle.draw(surface)
+    # 唤雨师【季风骤雨】特效：斜雨丝 + 地面溅水花
+    if game_state["global_rain_timer"] > 0:
+        rain_elapsed = game_state.get("rain_elapsed", 0.0)
+        slope = RAIN_FX_ANGLE_SLOPE
+        fall_dist = ARENA_RECT.height + RAIN_FX_DROP_LEN * 3.0
+        seed_base = 97
+        for i in range(RAIN_FX_COUNT):
+            phase = ((i * 2654435761) % 100000) / 100000.0
+            x0 = ARENA_RECT.left + ((i * 31) % 1000) / 1000.0 * ARENA_RECT.width
+            length = RAIN_FX_DROP_LEN * (0.7 + 0.6 * ((i * 17) % 100) / 100.0)
+            progress = ((rain_elapsed * RAIN_FX_SPEED + phase * fall_dist) % fall_dist) / fall_dist
+            y0 = ARENA_RECT.top + progress * fall_dist - RAIN_FX_DROP_LEN
+            x1 = x0 + slope * RAIN_FX_DROP_LEN
+            y1 = y0 + RAIN_FX_DROP_LEN
+            darker = i % 3 == 0
+            color = (102, 148, 208) if darker else RAIN_FX_COLOR
+            pygame.draw.line(surface, color, (round(x0 + slope * length * 0.2), round(y0)), (round(x1), round(y1)), 1)
+        for splash in game_state.get("rain_splashes", []):
+            splash_progress = splash["t"] / RAIN_SPLASH_LIFETIME
+            alpha = 1.0 - splash_progress
+            radius = 2.0 + splash_progress * 5.0
+            pygame.draw.circle(surface, RAIN_SPLASH_COLOR, (round(splash["x"]), round(splash["y"])), max(1, round(radius)), max(1, round(1 + alpha * 2)))
+            pygame.draw.circle(surface, (210, 232, 252), (round(splash["x"]), round(splash["y"])), max(1, round(radius * 0.3)))
     for character in game_state["characters"]:
         character.draw(surface, label_font)
     executioner_present = any(
