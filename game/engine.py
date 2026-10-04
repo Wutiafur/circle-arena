@@ -4469,9 +4469,18 @@ def cast_design_skill(caster, game_state, token=None):
         if target is not None:
             add_design_effect(game_state, DesignEffect("pillar", caster, target.pos, radius=40.0, lifetime=5.0, dps=25.0, heal=10.0))
     elif token == "broadside":
-        # 幽灵船长【侧舷齐射】：生成半透明幽灵船，5 枚炮弹从船侧射出
-        direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
-        direction = direction.normalize()
+        # 幽灵船长【侧舷齐射】：瞄准最近敌人，生成半透明幽灵船，5 枚炮弹从船侧射出
+        aim_target = select_nearest_enemy(caster, game_state["characters"])
+        if aim_target is not None:
+            aim_offset = aim_target.pos - caster.pos
+            if aim_offset.length_squared() > 0.001:
+                direction = aim_offset.normalize()
+            else:
+                direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
+                direction = direction.normalize()
+        else:
+            direction = caster.recent_move_dir if caster.recent_move_dir.length_squared() > 0 else random_unit_vector()
+            direction = direction.normalize()
         ship_pos = pygame.Vector2(caster.pos) + direction * GHOST_SHIP_OFFSET
         add_design_effect(
             game_state,
