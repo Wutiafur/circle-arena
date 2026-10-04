@@ -337,3 +337,70 @@ def apply_faction_bonuses(game_state):
                 tier = 1
         c.faction_bonus = bonus
         c.faction_bonus_tier = tier
+
+
+def apply_interrupt_ticks(game_state, dt):
+    """遮断阵营专属结算（边狱巴士震颤式）：
+    - 场上任一 owner 的遮断角色 ≥2 时，「遮断」机制对所有目标生效
+    - 每 3 秒：遮断条 += 当前强度 × 1；遮断层数 -1（归零 → 状态消散，条保留）
+    - 遮断条 ≥ 目标当前生命值 → 爆发：条消失、眩晕 5 秒、期间物抗/法抗 = 2.5（5 秒后恢复）
+    """
+    # 判定场上是否存在触发的遮断阵营（任一 owner 的遮断角色 ≥2）
+    interrupt_active_global = False
+    faction_counts = {}
+    for c in game_state["characters"]:
+        if not c.alive:
+            continue
+        tag = getattr(c, "faction_tag", None)
+        if tag:
+            d = faction_counts.setdefault(c.owner_id, {})
+            d[tag] = d.get(tag, 0) + 1
+            if d[tag] >= 2 and tag == "遮断":
+                interrupt_active_global = True
+
+    for target in get_targetables(game_state):
+        if not target.alive or not hasattr(target, "design_interrupt_bar"):
+            continue
+        # 爆发状态计时（5 秒后恢复抗性）
+        if getattr(target, "design_interrupt_break_timer", 0.0) > 0:
+            target.design_interrupt_break_timer = max(0.0, target.design_interrupt_break_timer - dt)
+            if target.design_interrupt_break_timer == 0:
+                if getattr(target, "design_interrupt_break_phys_saved", 0.0) > 0:
+                    target.physical_resistance = target.design_interrupt_break_phys_saved
+                    target.design_interrupt_break_phys_saved = 0.0
+                if getattr(target, "design_interrupt_break_spell_saved", 0.0) > 0:
+                    target.spell_resistance = target.design_interrupt_break_spell_saved
+                    target.design_interrupt_break_spell_saved = 0.0
+        # 3 秒 tick 结算（仅遮断机制激活时增长）
+        if interrupt_active_global and getattr(target, "design_interrupt_active", False):
+            target.design_interrupt_tick += dt
+            while target.design_interrupt_tick >= INTERRUPT_TICK_INTERVAL:
+                target.design_interrupt_tick -= INTERRUPT_TICK_INTERVAL
+                potency = float(getattr(target, "design_interrupt_potency", 0.0))
+                count = float(getattr(target, "design_interrupt_count", 0.0))
+                if potency > 0:
+                    target.design_interrupt_bar += potency * INTERRUPT_BAR_GAIN_PER_POTENCY
+                count -= INTERRUPT_COUNT_DECAY_PER_TICK
+                target.design_interrupt_count = max(0.0, count)
+                if count <= 0:
+                    target.design_interrupt_active = False
+                    target.design_interrupt_potency = 0.0
+        # 爆发判定：遮断条 ≥ 当前生命值（只要有条就判，即使状态已消散）
+        if target.design_interrupt_bar >= max(1.0, getattr(target, "hp", 1.0)):
+            if getattr(target, "design_interrupt_break_timer", 0.0) <= 0:
+                target.design_interrupt_break_phys_saved = getattr(target, "physical_resistance", 1.0)
+                target.design_interrupt_break_spell_saved = getattr(target, "spell_resistance", 1.0)
+            target.physical_resistance = INTERRUPT_BREAK_RESIST
+            target.spell_resistance = INTERRUPT_BREAK_RESIST
+            target.design_interrupt_break_timer = INTERRUPT_BREAK_RESIST_DURATION
+            if hasattr(target, "apply_stun"):
+                target.apply_stun(INTERRUPT_BREAK_STUN_DURATION)
+            if game_state is not None:
+                spawn_damage_text(game_state, target, 0.0, text="遮断爆发！", color=INTERRUPT_BAR_COLOR)
+                spawn_attack_impact(game_state, target.pos, INTERRUPT_BAR_COLOR, radius=26, thickness=4, burst_count=20)
+            # 清空遮断状态，重新累积
+            target.design_interrupt_bar = 0.0
+            target.design_interrupt_potency = 0.0
+            target.design_interrupt_count = 0.0
+            target.design_interrupt_active = False
+            target.design_interrupt_tick = 0.0

@@ -332,6 +332,14 @@ class Character:
         self.design_has_revived = False
         self.design_low_hp_triggered = False
         self.design_hive_damage_accum = 0.0
+        # 遮断阵营（边狱巴士震颤式）：强度/层数/遮断条
+        self.design_interrupt_potency = 0.0
+        self.design_interrupt_count = 0.0
+        self.design_interrupt_bar = 0.0
+        self.design_interrupt_tick = 0.0
+        self.design_interrupt_break_timer = 0.0
+        self.design_interrupt_break_phys_saved = 0.0
+        self.design_interrupt_break_spell_saved = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -572,6 +580,17 @@ class Character:
         self.design_ray_resist_total = getattr(self, "design_ray_resist_total", 0.0) + amount
         self.spell_resistance = max(0.0, self.spell_resistance - amount)
         self.design_ray_resist_timer = max(getattr(self, "design_ray_resist_timer", 0.0), duration)
+
+    def gain_interrupt_potency(self, potency, count=1.0):
+        """遮断阵营通用入口：为目标叠加【遮断】强度与层数（技能/被动调用）。
+
+        potency 由技能或被动给出；count 决定状态持续时间（每 3 秒 -1 层）。
+        """
+        if not self.alive or potency <= 0:
+            return
+        self.design_interrupt_active = True
+        self.design_interrupt_potency = max(0.0, getattr(self, "design_interrupt_potency", 0.0) + potency)
+        self.design_interrupt_count += max(0.0, count)
 
     def spawn_sea_fish(self, game_state, anchor=None):
         if not self.is_sea_sage() or game_state is None:
@@ -5129,6 +5148,16 @@ class Character:
 
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, mp_rect, 1, border_radius=2)
+        # 遮断阵营【遮断条】：金色，位于血条 0 位置（左端起向右爬），比例 = 遮断条层数/当前生命值
+        if getattr(self, "design_interrupt_bar", 0.0) > 0:
+            interrupt_rect = pygame.Rect(hp_rect.left, mp_rect.bottom + 2, hp_rect.width, 4)
+            pygame.draw.rect(surface, (46, 40, 30), interrupt_rect, border_radius=2)
+            interrupt_ratio = clamp(self.design_interrupt_bar / max(1.0, self.hp), 0.0, 1.0)
+            if interrupt_ratio > 0:
+                fill = interrupt_rect.copy()
+                fill.width = max(1, int(interrupt_rect.width * interrupt_ratio))
+                pygame.draw.rect(surface, INTERRUPT_BAR_COLOR, fill, border_radius=2)
+            pygame.draw.rect(surface, (120, 104, 70), interrupt_rect, 1, border_radius=2)
         if self.design_corrupted_blood > 0:
             blood_rect = pygame.Rect(hp_rect.left, mp_rect.bottom + 2, hp_rect.width, 4)
             pygame.draw.rect(surface, (40, 34, 52), blood_rect, border_radius=2)

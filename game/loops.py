@@ -769,6 +769,8 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
                 for index, character in enumerate(gs["characters"]):
                     for other in gs["characters"][index + 1 :]:
                         character.resolve_overlap(other)
+                # 遮断阵营结算（与 battle_loop 同款）
+                apply_interrupt_ticks(gs, dt)
                 # 武器拾取（与 battle_loop 同款）：擂台赛也能拾取插地的冷锋枪等实体武器
                 for orb in gs["weapon_orbs"]:
                     if not orb.alive:
@@ -1212,6 +1214,7 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
             for _ in range(steps):
                 game_state["elapsed_time"] += sim_dt
                 apply_faction_bonuses(game_state)
+                apply_interrupt_ticks(game_state, sim_dt)
                 update_weapon_orbs(game_state, sim_dt)
                 living_characters = get_living_characters(game_state)
                 for character in living_characters:

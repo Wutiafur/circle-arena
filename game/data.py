@@ -3809,6 +3809,11 @@ FACTION_DEFS = {
         "tier1": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
         "tier2": {"damage": 0.0, "reduction": 0.20, "attack_speed": 0.0, "move_speed": 0.0},
     },
+    # 遮断：纯机制阵营（震颤条），tier 无属性加成，效果由 apply_interrupt_ticks 专属结算
+    "遮断": {
+        "tier1": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
+        "tier2": {"damage": 0.0, "reduction": 0.0, "attack_speed": 0.0, "move_speed": 0.0},
+    },
 }
 
 FACTION_TAGS = {
@@ -3852,6 +3857,17 @@ FACTION_TAGS = {
     "DesignRole124_loyalguard": "嫉妒",
     "DesignRole125_grudge_blade": "嫉妒",
     "DesignRole126_envy_prelate": "嫉妒",
+# 遮断（后续补充钉锤工 129 / 修筑师 130 接入）
+    "DesignRole129_hammerman": "遮断",
+    "DesignRole130_builder": "遮断",
 }
+# 遮断阵营机制常量（边狱巴士震颤式：强度/层数 双维）
+INTERRUPT_TICK_INTERVAL = 3.0
+INTERRUPT_BAR_GAIN_PER_POTENCY = 1.0
+INTERRUPT_COUNT_DECAY_PER_TICK = 1
+INTERRUPT_BREAK_STUN_DURATION = 5.0
+INTERRUPT_BREAK_RESIST = 2.5
+INTERRUPT_BREAK_RESIST_DURATION = 5.0
+INTERRUPT_BAR_COLOR = (255, 208, 120)
 
-FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影", "嫉妒"]
+FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影", "嫉妒", "遮断"]
