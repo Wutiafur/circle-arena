@@ -349,6 +349,8 @@ class Character:
         self.hammer_save_timer = 0.0
         self.hammer_sanctuary = False
         self.hammer_sanctuary_ally_shield_timer = 0.0
+        # 130 修筑师：自身遮断条衰减计时
+        self.builder_bar_decay_timer = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -1831,6 +1833,23 @@ class Character:
             saved = self.hammer_save
             self.hammer_save = 0.0
             self.hammer_protection = min(DARK_PROTECTION_CAP, self.hammer_protection + saved * SAVE_TO_PROTECTION_MULT)
+
+    def update_builder(self, dt, game_state):
+        """修筑师被动2【震荡自身】：每 5 秒减少自身 50% 遮断条。"""
+        if self.job_name != BUILDER_JOB_NAME:
+            return
+        if game_state is None:
+            return
+        self.builder_bar_decay_timer += dt
+        if self.builder_bar_decay_timer >= BUILDER_SELF_BAR_DECAY_INTERVAL and self.design_interrupt_bar > 0:
+            self.builder_bar_decay_timer -= BUILDER_SELF_BAR_DECAY_INTERVAL
+            self.design_interrupt_bar *= 1.0 - BUILDER_SELF_BAR_DECAY_RATIO
+
+    def apply_builder_self_interrupt(self):
+        """修筑师被动2【震荡自身】：使用技能时对自身施加 2 层【遮断】（+2 强度 +2 层）。"""
+        if self.job_name != BUILDER_JOB_NAME or not self.alive:
+            return
+        self.gain_interrupt_potency(BUILDER_SELF_INTERRUPT_GAIN, BUILDER_SELF_INTERRUPT_GAIN)
 
     def apply_sanctuary_ally_shield(self, game_state):
         """保存神域·友方施法庇护：同队钉锤工在场且保存>0 时，本次使用技能获得
@@ -3401,6 +3420,7 @@ class Character:
                 return
             if cast_design_skill(self, game_state):
                 self.mp = 0.0
+                self.apply_builder_self_interrupt()
                 self.apply_sanctuary_ally_shield(game_state)
                 add_design_effect(
                     game_state,
@@ -3417,6 +3437,7 @@ class Character:
             return
 
         self.mp = 0.0
+        self.apply_builder_self_interrupt()
         self.apply_sanctuary_ally_shield(game_state)
         if skill_id == "knight_guard":
             self.shield_timer = KNIGHT_SHIELD_DURATION
@@ -4738,6 +4759,7 @@ class Character:
         self.update_prelate(dt, game_state)
         self.update_chargemaster(dt, game_state)
         self.update_hammerman(dt, game_state)
+        self.update_builder(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_overload_timer > 0:
             self.design_overload_timer = max(0.0, self.design_overload_timer - dt)

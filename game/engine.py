@@ -120,11 +120,25 @@ def trigger_interrupt_break(target, game_state=None, ratio=1.0):
 
     ratio 可提供额外倍率（如保存神域对敌方 +10% → 1.1）。前移后若遮断条 ≥ 当前生命值，
     由 apply_interrupt_ticks 在下一帧结算触发爆发（由调用方主动调也立即校验）。
+    修筑师【崩塌反震】：引爆时若场上有同队修筑师存活，对目标追加
+    前移量 30% 的真实伤害（向下取整、最多 20）。
     """
     if target is None or not getattr(target, "alive", False) or not hasattr(target, "design_interrupt_bar"):
         return 0.0
     potency = float(getattr(target, "design_interrupt_potency", 0.0))
     target.design_interrupt_bar += potency * ratio
+    # 崩塌反震：引爆命中时若同队有存活修筑师 → 真伤
+    if game_state is not None and potency > 0:
+        builder_present = False
+        for c in game_state.get("characters", []):
+            if c.alive and getattr(c, "job_name", None) == BUILDER_JOB_NAME and c.owner_id != getattr(target, "owner_id", None):
+                builder_present = True
+                break
+        if builder_present:
+            rumble = min(BUILDER_RUMBLE_TRUE_CAP, int((potency * ratio) * BUILDER_RUMBLE_TRUE_RATIO))
+            if rumble >= 1 and hasattr(target, "take_damage"):
+                source = next((c for c in game_state.get("characters", []) if c.alive and c.job_name == BUILDER_JOB_NAME and c.owner_id != getattr(target, "owner_id", None)), None)
+                target.take_damage(float(rumble), source=source, damage_type="true_builder_rumble", game_state=game_state)
     return potency * ratio
 
 
@@ -4828,6 +4842,40 @@ def cast_design_skill(caster, game_state, token=None):
                     trigger_interrupt_break(target, game_state)
                     if hasattr(target, "design_interrupt_count"):
                         target.design_interrupt_count = max(0.0, target.design_interrupt_count - 1)
+        return True
+    elif token == "builder_construct":
+        # 修筑师【坍方顶砸】：消耗10层自身遮断可+50%威力并额外+3层；
+        # 对最近敌人 (40+5×自身遮断层数) 物伤、目标+4强度；击退100，沿线碰撞其他敌人则引爆
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        consumed = False
+        own_layers = float(getattr(caster, "design_interrupt_count", 0.0))
+        if own_layers >= BUILDER_QUAKE_CHARGE_COST:
+            caster.design_interrupt_count = max(0.0, own_layers - BUILDER_QUAKE_CHARGE_COST)
+            consumed = True
+        # 伤害按消耗前层数计算；消耗时威力 +50%
+        damage_ratio = 1.0 + (BUILDER_QUAKE_POWER_BONUS if consumed else 0.0)
+        strike = (BUILDER_QUAKE_BASE + BUILDER_QUAKE_PER_LAYER * own_layers) * damage_ratio
+        target.take_damage(strike, source=caster, damage_type="design_physical_builder_quakestrike", game_state=game_state)
+        target.gain_interrupt_potency(BUILDER_QUAKE_POTENCY_GAIN, 1.0)
+        if consumed and hasattr(target, "design_interrupt_count"):
+            target.design_interrupt_count += BUILDER_QUAKE_EXTRA_LAYERS
+        spawn_attack_impact(game_state, target.pos, BUILDER_COLOR, radius=14, thickness=3, burst_count=12)
+        # 击退 100 + 沿线扫查碰撞 → 命中其他敌人则引爆（被撞者）
+        direction = target.pos - caster.pos
+        if direction.length_squared() == 0:
+            direction = random_unit_vector()
+        direction = direction.normalize()
+        start_pos = pygame.Vector2(target.pos)
+        end_pos = start_pos + direction * BUILDER_QUAKE_KNOCKBACK
+        for other in get_targetables(game_state):
+            if other is target or not other.alive or other.owner_id == caster.owner_id:
+                continue
+            if distance_point_to_segment(other.pos, start_pos, end_pos) <= other.radius + 14.0:
+                trigger_interrupt_break(other, game_state)
+                spawn_attack_impact(game_state, other.pos, BUILDER_COLOR, radius=14, thickness=3, burst_count=10)
+        target.apply_knockback(direction, BUILDER_QUAKE_KNOCKBACK)
         return True
     return True
 
