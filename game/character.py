@@ -351,6 +351,8 @@ class Character:
         self.hammer_sanctuary_ally_shield_timer = 0.0
         # 130 修筑师：自身遮断条衰减计时
         self.builder_bar_decay_timer = 0.0
+        # 131 重垒壁：不破壁垒累计损失
+        self.bastion_lost_accum = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -3028,6 +3030,15 @@ class Character:
             self.hp = min(self.max_hp, self.hp + 5.0)
         if damage > 0 and self.is_xuanwu():
             self.add_shell(1)
+        # 131 重垒壁：以伤铸震（受伤自充遮断）+ 不破壁垒（累计损失15%→已损失30%护盾）
+        if self.job_name == BASTION_JOB_NAME and damage > 0:
+            self.gain_interrupt_potency(min(BASTION_SELF_POTENCY_CAP, damage * BASTION_SELF_POTENCY_PER_HP), BASTION_SELF_COUNT_PER_HIT)
+            self.bastion_lost_accum += damage
+            if self.bastion_lost_accum >= self.max_hp * BASTION_WALL_LOST_RATIO:
+                self.bastion_lost_accum = 0.0
+                lost = max(0.0, self.max_hp - self.hp)
+                if lost > 0:
+                    self.add_true_shield(lost * BASTION_WALL_SHIELD_RATIO)
         if self.job_name == "DesignRole74_ghost_capt" and not self.design_low_hp_triggered and self.hp > 0 and self.hp <= self.max_hp * 0.3 and game_state is not None:
             self.design_low_hp_triggered = True
             for _ in range(2):

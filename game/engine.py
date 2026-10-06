@@ -4877,6 +4877,18 @@ def cast_design_skill(caster, game_state, token=None):
                 spawn_attack_impact(game_state, other.pos, BUILDER_COLOR, radius=14, thickness=3, burst_count=10)
         target.apply_knockback(direction, BUILDER_QUAKE_KNOCKBACK)
         return True
+    elif token == "bastion_quake":
+        # 重垒壁【全场震裂】：对全体敌人 +8 强度 +3 层，并全员引爆一次
+        for other in get_targetables(game_state):
+            if not other.alive or other.owner_id == caster.owner_id:
+                continue
+            other.gain_interrupt_potency(BASTION_QUAKE_POTENCY, BASTION_QUAKE_COUNT)
+            trigger_interrupt_break(other, game_state)
+            spawn_attack_impact(game_state, other.pos, BASTION_COLOR, radius=14, thickness=3, burst_count=10)
+        game_state["shake_timer"] = max(game_state.get("shake_timer", 0.0), 0.12)
+        game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 4.0)
+        spawn_attack_impact(game_state, caster.pos, BASTION_COLOR, radius=30, thickness=4, burst_count=24)
+        return True
     return True
 
 

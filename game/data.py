@@ -3857,9 +3857,10 @@ FACTION_TAGS = {
     "DesignRole124_loyalguard": "嫉妒",
     "DesignRole125_grudge_blade": "嫉妒",
     "DesignRole126_envy_prelate": "嫉妒",
-# 遮断（后续补充钉锤工 129 / 修筑师 130 接入）
+# 遮断（129 钉锤工 / 130 修筑师 / 131 重垒壁）
     "DesignRole129_hammerman": "遮断",
     "DesignRole130_builder": "遮断",
+    "DesignRole131_bastion": "遮断",
 }
 # 遮断阵营机制常量（边狱巴士震颤式：强度/层数 双维）
 INTERRUPT_TICK_INTERVAL = 3.0
@@ -3914,5 +3915,15 @@ BUILDER_QUAKE_POTENCY_GAIN = 4.0
 BUILDER_QUAKE_EXTRA_LAYERS = 3.0
 BUILDER_QUAKE_KNOCKBACK = 100.0
 BUILDER_COLOR = (170, 152, 96)
+# 131 重垒壁（遮断第 3 人）：以伤铸震 / 不破壁垒 / 全场震裂
+BASTION_JOB_NAME = "DesignRole131_bastion"
+BASTION_SELF_POTENCY_PER_HP = 0.20
+BASTION_SELF_POTENCY_CAP = 10.0
+BASTION_SELF_COUNT_PER_HIT = 1.0
+BASTION_WALL_LOST_RATIO = 0.15
+BASTION_WALL_SHIELD_RATIO = 0.30
+BASTION_QUAKE_POTENCY = 8.0
+BASTION_QUAKE_COUNT = 3.0
+BASTION_COLOR = (168, 54, 58)
 
 FACTION_ORDER = ["四圣", "雷神", "亡灵", "野兽", "机械", "暗影", "嫉妒", "遮断"]
