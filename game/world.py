@@ -337,6 +337,17 @@ def apply_faction_bonuses(game_state):
                 tier = 1
         c.faction_bonus = bonus
         c.faction_bonus_tier = tier
+        # 保存神域·遮断友方增益：同队钉锤工 sanctury 且保存>0 时，
+        # 普攻伤害 +（保存/3 向下取整，≤+2）、双抗提升 20%（受伤 ×0.8）
+        c.hammer_faction_damage_bonus = 0.0
+        c.hammer_faction_reduction = 0.0
+        if c.alive and getattr(c, "faction_tag", None) == "遮断":
+            for ally in game_state["characters"]:
+                if ally.alive and ally.owner_id == c.owner_id and getattr(ally, "hammer_sanctuary", False) and getattr(ally, "hammer_save", 0.0) > 0:
+                    save = getattr(ally, "hammer_save", 0.0)
+                    c.hammer_faction_damage_bonus = min(SANCTUARY_FACTION_DAMAGE_CAP, int(save // SANCTUARY_FACTION_DAMAGE_DIV))
+                    c.hammer_faction_reduction = SANCTUARY_FACTION_REDUCTION
+                    break
 
 
 def apply_interrupt_ticks(game_state, dt):
@@ -358,9 +369,17 @@ def apply_interrupt_ticks(game_state, dt):
             if d[tag] >= 2 and tag == "遮断":
                 interrupt_active_global = True
 
+    # 保存神域：场上任意钉锤工 sanctury 激活且保存>0 时，其敌方全体减速 + 爆引前移 +10%
+    hammer_buff_owners = set()
+    for c in game_state["characters"]:
+        if c.alive and getattr(c, "hammer_sanctuary", False) and getattr(c, "hammer_save", 0.0) > 0:
+            hammer_buff_owners.add(c.owner_id)
+
     for target in get_targetables(game_state):
         if not target.alive or not hasattr(target, "design_interrupt_bar"):
             continue
+        if target.owner_id in hammer_buff_owners and hasattr(target, "apply_slow"):
+            target.apply_slow(SANCTUARY_ENEMY_SLOW, 0.2)
         # 爆发状态计时（5 秒后恢复抗性）
         if getattr(target, "design_interrupt_break_timer", 0.0) > 0:
             target.design_interrupt_break_timer = max(0.0, target.design_interrupt_break_timer - dt)

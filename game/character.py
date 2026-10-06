@@ -340,6 +340,15 @@ class Character:
         self.design_interrupt_break_timer = 0.0
         self.design_interrupt_break_phys_saved = 0.0
         self.design_interrupt_break_spell_saved = 0.0
+        # 129 钉锤工：钉子 / 保存 / 漆黑之神的加护 / 保存神域
+        self.hammer_nail_stacks = 0
+        self.hammer_nail_timer = 0.0
+        self.hammer_save = 0.0
+        self.hammer_protection = 0.0
+        self.hammer_protection_timer = 0.0
+        self.hammer_save_timer = 0.0
+        self.hammer_sanctuary = False
+        self.hammer_sanctuary_ally_shield_timer = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -591,6 +600,19 @@ class Character:
         self.design_interrupt_active = True
         self.design_interrupt_potency = max(0.0, getattr(self, "design_interrupt_potency", 0.0) + potency)
         self.design_interrupt_count += max(0.0, count)
+
+    def gain_save(self, amount):
+        """钉锤工【保存】：叠加保存层数；超过上限（25）的溢出部分 ×5 转化为【漆黑之神的加护】。"""
+        if not self.alive or amount <= 0:
+            return
+        before_cap = min(SAVE_CAP, self.hammer_save)
+        self.hammer_save += amount
+        overflow = max(0.0, self.hammer_save - SAVE_CAP)
+        self.hammer_save = min(SAVE_CAP, self.hammer_save)
+        if overflow > 0:
+            gained = overflow * SAVE_OVERFLOW_TO_PROTECTION_MULT
+            self.hammer_protection = min(DARK_PROTECTION_CAP, self.hammer_protection + gained)
+        return self.hammer_save - before_cap
 
     def spawn_sea_fish(self, game_state, anchor=None):
         if not self.is_sea_sage() or game_state is None:
@@ -898,8 +920,8 @@ class Character:
         damage *= 1.0 + self.design_collect_fervor * 0.2
         if self.killstreak_buff_level > 0:
             damage *= 1.0 + KILLSTREAK_GAIN_DAMAGE.get(self.killstreak_buff_level, 0.0)
-        if self.design_meta.get("role_num") == 63 and self.design_execute_buff_timer > 0:
-            damage *= 1.25
+        if getattr(self, "hammer_faction_damage_bonus", 0.0) > 0:
+            damage += self.hammer_faction_damage_bonus
         if self.design_sparrow_fury_timer > 0:
             damage *= 1.0 + SPARROW_FURY_DAMAGE_BONUS
         damage *= 1.0 + self.faction_bonus.get("damage", 0.0)
@@ -1768,6 +1790,67 @@ class Character:
                 if ally.alive and ally.owner_id == self.owner_id:
                     ally.design_overload_timer = max(getattr(ally, "design_overload_timer", 0.0), CHARGE_OVERLOAD_DURATION)
 
+    def update_hammerman(self, dt, game_state):
+        """钉锤工：钉子施加/漆黑加护计时/保存转换/保存神域。”
+        纯自身与队友增益由本方法结算；对敌方减速与遮断引爆加成在 world.apply_interrupt_ticks 里按保存神域判定。
+        """
+        if self.job_name != HAMMERMAN_JOB_NAME:
+            return
+        if game_state is None:
+            return
+        # 登场：首次激活保存神域 + 初始漆黑加护（25 层 → 立即结算 5% 护盾）
+        if not self.hammer_sanctuary:
+            self.hammer_sanctuary = True
+            self.hammer_protection = min(DARK_PROTECTION_CAP, self.hammer_protection + DARK_PROTECTION_INITIAL)
+            if self.hammer_protection > 0:
+                shield_ratio = self.hammer_protection * DARK_PROTECTION_SHIELD_RATIO
+                gained = shield_ratio * self.max_hp
+                self.add_true_shield(max(1.0, gained))
+                self.hammer_protection = 0.0
+                self.hammer_protection_timer = 0.0
+        # 每 5 秒给最近敌人 1 层钉子（最多 4 层）
+        self.hammer_nail_timer += dt
+        if self.hammer_nail_timer >= NAIL_APPLY_INTERVAL:
+            self.hammer_nail_timer -= NAIL_APPLY_INTERVAL
+            target = select_nearest_enemy(self, game_state["characters"])
+            if target is not None and target.alive and hasattr(target, "hammer_nail_stacks"):
+                if target.hammer_nail_stacks < NAIL_MAX_STACKS:
+                    target.hammer_nail_stacks += 1
+        # 每 10 秒：消耗全部漆黑加护 → 护盾（每层 = max_hp × 1/5%）
+        self.hammer_protection_timer += dt
+        if self.hammer_protection_timer >= DARK_PROTECTION_CONSUME_INTERVAL and self.hammer_protection > 0:
+            self.hammer_protection_timer = 0.0
+            consumed = self.hammer_protection
+            self.hammer_protection = 0.0
+            shield_ratio = consumed * DARK_PROTECTION_SHIELD_RATIO
+            self.add_true_shield(max(1.0, shield_ratio * self.max_hp))
+        # 每 20 秒：消耗全部保存 → 加护 ×3
+        self.hammer_save_timer += dt
+        if self.hammer_save_timer >= SAVE_TO_PROTECTION_INTERVAL and self.hammer_save > 0:
+            self.hammer_save_timer = 0.0
+            saved = self.hammer_save
+            self.hammer_save = 0.0
+            self.hammer_protection = min(DARK_PROTECTION_CAP, self.hammer_protection + saved * SAVE_TO_PROTECTION_MULT)
+
+    def apply_sanctuary_ally_shield(self, game_state):
+        """保存神域·友方施法庇护：同队钉锤工在场且保存>0 时，本次使用技能获得
+        max_hp ×（钉锤工保存×2）% 护盾（每 10 秒最多 1 次、上限 10% 最大生命）。"""
+        if game_state is None or self.clone_mode is not None:
+            return
+        hammer = None
+        for ally in game_state.get("characters", []):
+            if ally.alive and ally.owner_id == self.owner_id and getattr(ally, "hammer_sanctuary", False):
+                hammer = ally
+                break
+        if hammer is None or getattr(hammer, "hammer_save", 0.0) <= 0:
+            return
+        if getattr(self, "hammer_sanctuary_ally_shield_timer", 0.0) > 0:
+            return
+        ratio = min(SANCTUARY_ALLY_SHIELD_CAP, hammer.hammer_save * SANCTUARY_ALLY_SHIELD_RATIO)
+        self.hammer_sanctuary_ally_shield_timer = SANCTUARY_ALLY_SHIELD_CD
+        if hasattr(self, "add_true_shield"):
+            self.add_true_shield(max(1.0, ratio * self.max_hp))
+
     def record_rewind_snapshot(self, current_time):
         if self.job_name != "Time Walker" or not self.is_main_character:
             return
@@ -2306,6 +2389,8 @@ class Character:
             damage *= 1.0 - GRUDGE_FORT_REDUCTION
         if getattr(self, "prelate_bless", False) and damage > 0:
             damage *= 1.0 - PRELATE_FORT_REDUCTION
+        if getattr(self, "hammer_faction_reduction", 0.0) > 0 and damage > 0:
+            damage *= 1.0 - self.hammer_faction_reduction
         if getattr(self, "prelate_lone_buff", False) and damage > 0:
             damage *= 1.0 - PRELATE_LONE_REDUCTION
         if self.design_tide_link_active and not self._tide_share and damage > 0 and game_state is not None:
@@ -3316,6 +3401,7 @@ class Character:
                 return
             if cast_design_skill(self, game_state):
                 self.mp = 0.0
+                self.apply_sanctuary_ally_shield(game_state)
                 add_design_effect(
                     game_state,
                     DesignEffect(
@@ -3331,6 +3417,7 @@ class Character:
             return
 
         self.mp = 0.0
+        self.apply_sanctuary_ally_shield(game_state)
         if skill_id == "knight_guard":
             self.shield_timer = KNIGHT_SHIELD_DURATION
             self.guard_timer = KNIGHT_GUARD_DURATION
@@ -4121,6 +4208,8 @@ class Character:
             if self.design_ray_resist_timer == 0 and self.design_ray_resist_total > 0:
                 self.spell_resistance += self.design_ray_resist_total
                 self.design_ray_resist_total = 0.0
+        if self.hammer_sanctuary_ally_shield_timer > 0:
+            self.hammer_sanctuary_ally_shield_timer = max(0.0, self.hammer_sanctuary_ally_shield_timer - dt)
         if self.is_sea_sage():
             self.sea_tide_pick_timer += dt
             while self.sea_tide_pick_timer >= SEA_SAGE_FISH_AUTO_INTERVAL:
@@ -4648,6 +4737,7 @@ class Character:
         self.update_grudge_blade(dt, game_state)
         self.update_prelate(dt, game_state)
         self.update_chargemaster(dt, game_state)
+        self.update_hammerman(dt, game_state)
         self.update_soul_blade(dt, game_state)
         if self.design_overload_timer > 0:
             self.design_overload_timer = max(0.0, self.design_overload_timer - dt)
@@ -5313,6 +5403,13 @@ class Character:
             if self.design_banish_mark >= BANISH_MARKS_REQUIRED - 1:
                 last_pulse = 0.5 + 0.5 * math.sin(self.design_recently_hit * 10.0)
                 pygame.draw.circle(surface, (206, 170, 255, int(120 + 100 * last_pulse)), (center[0], center[1] - self.radius - 32), 8, 1)
+        # 129 钉锤工【钉子】：金色 T 字形钉在敌人身上（每层一个，竖直排布）
+        if getattr(self, "hammer_nail_stacks", 0) > 0:
+            for i in range(min(NAIL_MAX_STACKS, int(self.hammer_nail_stacks))):
+                nail_x = center[0] - 6 + i * 6
+                nail_y = center[1] - self.radius - 6
+                pygame.draw.line(surface, HAMMER_NAIL_COLOR, (nail_x, nail_y - 5), (nail_x, nail_y + 5), 2)
+                pygame.draw.line(surface, (255, 236, 190), (nail_x - 4, nail_y - 5), (nail_x + 4, nail_y - 5), 2)
         if self.design_corrupted_blood > 0:
             pygame.draw.circle(surface, SPARROW_COLOR, (center[0], center[1] - self.radius - 8), 3)
             pygame.draw.circle(surface, (255, 236, 210), (center[0], center[1] - self.radius - 8), 3, 1)

@@ -209,6 +209,8 @@ ROLE_CONFIG_OVERRIDES = {
     126: {"skill_token": "prelate_ult", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
     127: {"skill_token": "charge_drain", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 8.0},
     128: {"skill_token": "pierce_ray", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 8.0, "attack_interval": 6.0},
+    129: {"skill_token": "hammerman_smite", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
+    130: {"skill_token": "builder_construct", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 8.0},
 }
 
 

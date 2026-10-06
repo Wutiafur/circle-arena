@@ -115,6 +115,19 @@ def select_nearest_targetable(unit, game_state):
     return nearest
 
 
+def trigger_interrupt_break(target, game_state=None, ratio=1.0):
+    """遮断引爆：令目标混乱阈值（遮断条）立刻前移与当前遮断强度相同的数值。
+
+    ratio 可提供额外倍率（如保存神域对敌方 +10% → 1.1）。前移后若遮断条 ≥ 当前生命值，
+    由 apply_interrupt_ticks 在下一帧结算触发爆发（由调用方主动调也立即校验）。
+    """
+    if target is None or not getattr(target, "alive", False) or not hasattr(target, "design_interrupt_bar"):
+        return 0.0
+    potency = float(getattr(target, "design_interrupt_potency", 0.0))
+    target.design_interrupt_bar += potency * ratio
+    return potency * ratio
+
+
 def select_random_targetable(unit, game_state):
     targets = [target for target in get_targetables(game_state) if target.owner_id != unit.owner_id and target is not unit]
     if not targets:
@@ -4785,6 +4798,37 @@ def cast_design_skill(caster, game_state, token=None):
         if target is not None:
             spawn_design_projectile(caster, game_state, target.pos - caster.pos, 100.0, "design_physical_throw", (244, 220, 176), speed=360.0, max_range=320.0)
         caster.clear_weapon()
+    elif token == "hammerman_smite":
+        # 钉锤工【裁决钉击】：对最近敌人 3 次 (40+5×钉子) 物理伤害；
+        # 每次命中 +1 钉子、自身 +8 保存；首段后 +4 强度 +3 层遮断并引爆(层数-1)；
+        # 若目标钉子 ≥3 再引爆(层数-1)。
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        nail_gain_first = HAMMER_NAIL_GAIN_PER_HIT
+        for hit_index in range(HAMMER_SMITE_HITS):
+            if target is None or not target.alive:
+                break
+            nail_stacks = int(getattr(target, "hammer_nail_stacks", 0))
+            strike_damage = HAMMER_SMITE_BASE + HAMMER_SMITE_PER_NAIL * nail_stacks
+            dealt = target.take_damage(strike_damage, source=caster, damage_type="design_physical_hammerman_smite", game_state=game_state)
+            if hasattr(target, "hammer_nail_stacks"):
+                target.hammer_nail_stacks = min(NAIL_MAX_STACKS, target.hammer_nail_stacks + nail_gain_first)
+            if hasattr(caster, "gain_save"):
+                caster.gain_save(HAMMER_SAVE_GAIN)
+            spawn_attack_impact(game_state, target.pos, HAMMER_COLOR, radius=12, thickness=3, burst_count=8)
+            if hit_index == 0:
+                # 首段命中：施加遮断强度/层数并引爆
+                target.gain_interrupt_potency(HAMMER_INTERRUPT_POTENCY, HAMMER_INTERRUPT_COUNT)
+                trigger_interrupt_break(target, game_state)
+                if hasattr(target, "design_interrupt_count"):
+                    target.design_interrupt_count = max(0.0, target.design_interrupt_count - 1)
+                # 钉子 ≥3：再次引爆（层数再 -1）
+                if nail_stacks >= HAMMER_SMITE_NAIL_THRESHOLD:
+                    trigger_interrupt_break(target, game_state)
+                    if hasattr(target, "design_interrupt_count"):
+                        target.design_interrupt_count = max(0.0, target.design_interrupt_count - 1)
+        return True
     return True
 
 
