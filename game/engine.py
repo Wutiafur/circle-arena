@@ -4889,6 +4889,22 @@ def cast_design_skill(caster, game_state, token=None):
         game_state["shake_magnitude"] = max(game_state.get("shake_magnitude", 0.0), 4.0)
         spawn_attack_impact(game_state, caster.pos, BASTION_COLOR, radius=30, thickness=4, burst_count=24)
         return True
+    elif token == "blood_slash":
+        # 玄血武者【三连玄斩】：对最近敌人 3×172% 普攻物理伤害；
+        # 目标只剩玄血（HP≈0 且玄血>0）时每段追加原伤害 30% 形毁伤害
+        target = select_nearest_enemy(caster, game_state["characters"])
+        if target is None:
+            return False
+        for _ in range(BLOOD_SLASH_HITS):
+            if target is None or not target.alive:
+                break
+            strike = caster.get_current_basic_damage() * BLOOD_SLASH_ATTACK_RATIO
+            if getattr(target, "hp", 1.0) <= 1.0 and getattr(target, "design_blood_essence", 0.0) > 0:
+                target.take_damage(strike * (1.0 + BLOOD_SHATTER_EXECUTE_RATIO), source=caster, damage_type="design_physical_blood_slash_execute", game_state=game_state)
+            else:
+                target.take_damage(strike, source=caster, damage_type="design_physical_blood_slash", game_state=game_state)
+            spawn_attack_impact(game_state, target.pos, BLOODARTIST_COLOR, radius=13, thickness=3, burst_count=10)
+        return True
     return True
 
 

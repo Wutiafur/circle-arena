@@ -353,6 +353,9 @@ class Character:
         self.builder_bar_decay_timer = 0.0
         # 131 重垒壁：不破壁垒累计损失
         self.bastion_lost_accum = 0.0
+        # 132 玄血武者：玄血（第二生命条）
+        self.design_blood_essence = 0.0
+        self.design_blood_essence_max = 0.0
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -479,6 +482,8 @@ class Character:
             self.design_phoenix_feather = PHOENIX_FEATHER_INITIAL
         if self.job_name == XUANWU_JOB_NAME:
             self.design_shell_base_max_hp = self.max_hp
+        if self.design_blood_essence_max <= 0:
+            self.design_blood_essence_max = self.max_hp * BLOOD_ESSENCE_CAP_RATIO
         if self.is_twin_mirror():
             self.init_twin_mirror_state()
         self.update_rect()
@@ -2192,6 +2197,13 @@ class Character:
             return 0.0
         if self.is_vampire():
             amount *= 1.0 + self.get_vampire_blood_stacks() * 0.05
+        # 玄血吞治疗：玄血>0 时回血量先补充玄血缺口（HP 不涨）
+        if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0:
+            capacity = max(0.0, getattr(self, "design_blood_essence_max", self.max_hp) - self.design_blood_essence)
+            if capacity > 0:
+                fill = min(amount, capacity)
+                self.design_blood_essence += fill
+                amount -= fill
         previous = self.hp
         self.hp = min(self.max_hp, self.hp + amount)
         healed = self.hp - previous
@@ -2406,6 +2418,18 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
+        # 玄血（132 玄血武者被动）：玄血>0 时受击伤害视为【形毁】（×1.5、无视防御减伤），
+        # 并优先由玄血吸收该伤害（吸收量=结算后伤害，因自身玄血为第二生命）
+        blood_shatter_bypass = False
+        blood_protected = False
+        if getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
+            blood_protected = True
+            damage *= BLOOD_SHATTER_DAMAGE_MULT
+            absorbed = min(damage, self.design_blood_essence)
+            self.design_blood_essence -= absorbed
+            damage -= absorbed
+            if damage > 0:
+                blood_shatter_bypass = True
         if getattr(self, "envy_fortress", False) and damage > 0:
             damage *= 1.0 - GRUDGE_FORT_REDUCTION
         if getattr(self, "prelate_bless", False) and damage > 0:
@@ -2583,7 +2607,7 @@ class Character:
         if self.job_name == "DesignRole69_ironclad":
             damage = min(damage, self.max_hp * DESIGN_IRONCLAD_HIT_CAP)
         if damage_kind == DAMAGE_KIND_PHYSICAL:
-            if not ignore_physical_resistance:
+            if not ignore_physical_resistance and not blood_shatter_bypass:
                 damage *= self.physical_resistance
             # ignore_physical_resistance=True：无视物理抵抗，默认按物理抵抗 1（全额结算）
             if self.is_windstorm_fox() and self.windstorm_physical_resistance_bonus > 0:
@@ -2591,7 +2615,8 @@ class Character:
             if self.thunder_resist_timer > 0:
                 damage *= max(0.0, 1.0 - THUNDER_SLASH_RESIST_BONUS)
         elif damage_kind == DAMAGE_KIND_SPELL:
-            damage *= self.spell_resistance
+            if not blood_shatter_bypass:
+                damage *= self.spell_resistance
             if self.thunder_resist_timer > 0:
                 damage *= max(0.0, 1.0 - THUNDER_SLASH_RESIST_BONUS)
         if self.is_xuanwu() and self.design_shell_stacks > 0 and not is_true_damage:
@@ -2866,6 +2891,11 @@ class Character:
                     crit=is_true_damage or damage >= DAMAGE_TEXT_CRIT_THRESHOLD,
                 )
             )
+        if self.hp <= 0 and blood_protected:
+            # 玄血护体：本次受击前玄血>0（伤害已部分吸收）→ HP 归零保命（钳到 1 继续战斗）
+            self.hp = 1.0
+            if game_state is not None:
+                spawn_damage_text(game_state, self, 0.0, text="玄血护体", color=BLOOD_ESSENCE_COLOR)
         if self.hp <= 0 and self.design_corrupted_blood <= 0:
             self.design_corrupted_blood = 0.0
             if game_state is not None:
@@ -3039,6 +3069,12 @@ class Character:
                 lost = max(0.0, self.max_hp - self.hp)
                 if lost > 0:
                     self.add_true_shield(lost * BASTION_WALL_SHIELD_RATIO)
+        # 132 玄血武者：造成伤害时蓄等量玄血（攻击者为 132 时）
+        if damage > 0 and source_character is not None and source_character is not self and source_character.job_name == BLOODARTIST_JOB_NAME:
+            source_character.design_blood_essence = min(
+                getattr(source_character, "design_blood_essence_max", source_character.max_hp),
+                source_character.design_blood_essence + damage,
+            )
         if self.job_name == "DesignRole74_ghost_capt" and not self.design_low_hp_triggered and self.hp > 0 and self.hp <= self.max_hp * 0.3 and game_state is not None:
             self.design_low_hp_triggered = True
             for _ in range(2):
@@ -5271,6 +5307,16 @@ class Character:
 
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, mp_rect, 1, border_radius=2)
+        # 玄血条（132 玄血武者）：血条上方第二生命暗红条
+        if getattr(self, "design_blood_essence_max", 0.0) > 0:
+            blood_rect = pygame.Rect(hp_rect.left, hp_rect.top - 12, hp_rect.width, 4)
+            pygame.draw.rect(surface, (28, 24, 32), blood_rect, border_radius=2)
+            blood_ratio = clamp(self.design_blood_essence / max(1.0, self.design_blood_essence_max), 0.0, 1.0)
+            if blood_ratio > 0:
+                fill = blood_rect.copy()
+                fill.width = max(1, int(blood_rect.width * blood_ratio))
+                pygame.draw.rect(surface, BLOOD_ESSENCE_COLOR, fill, border_radius=2)
+            pygame.draw.rect(surface, (96, 52, 64), blood_rect, 1, border_radius=2)
         # 遮断阵营【遮断条】：金色，位于血条 0 位置（左端起向右爬），比例 = 遮断条层数/当前生命值
         if getattr(self, "design_interrupt_bar", 0.0) > 0:
             interrupt_rect = pygame.Rect(hp_rect.left, mp_rect.bottom + 2, hp_rect.width, 4)

@@ -212,6 +212,7 @@ ROLE_CONFIG_OVERRIDES = {
     129: {"skill_token": "hammerman_smite", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
     130: {"skill_token": "builder_construct", "basic_damage_kind": "spell", "mp_mode": "passive", "mp_rate": 8.0},
     131: {"skill_token": "bastion_quake", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
+    132: {"skill_token": "blood_slash", "basic_damage_kind": "physical", "mp_mode": "passive", "mp_rate": 8.0},
 }
 
 
