@@ -356,6 +356,7 @@ class Character:
         # 132 玄血武者：玄血（第二生命条）
         self.design_blood_essence = 0.0
         self.design_blood_essence_max = 0.0
+        self.design_blood_fused = False
         self.design_construct_timer = DESIGN_CONSTRUCT_INTERVAL
         self.design_recently_hit = 0.0
         self.design_collect_fervor = 0
@@ -2197,8 +2198,8 @@ class Character:
             return 0.0
         if self.is_vampire():
             amount *= 1.0 + self.get_vampire_blood_stacks() * 0.05
-        # 玄血吞治疗：玄血>0 时回血量先补充玄血缺口（HP 不涨）
-        if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0:
+        # 玄血吞治疗：玄血>0 时回血量先补充玄血缺口（HP 不涨）；玄成后不再吸蓄
+        if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0 and not getattr(self, "design_blood_fused", False):
             capacity = max(0.0, getattr(self, "design_blood_essence_max", self.max_hp) - self.design_blood_essence)
             if capacity > 0:
                 fill = min(amount, capacity)
@@ -2418,14 +2419,43 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
-        # 玄血（132 玄血武者被动）：玄血>0 时受击伤害视为【形毁】（×1.5、无视防御减伤），
-        # 并优先由玄血吸收该伤害（吸收量=结算后伤害，因自身玄血为第二生命）
+        # --- 玄血机制（主人定稿）---
+        # 1) 蓄玄血：任意角色受击结算前，将本次伤害的 50% 存入自身玄血（未玄成、未满时）
+        blood_just_gained = 0.0
+        if not getattr(self, "design_blood_fused", False) and getattr(self, "design_blood_essence_max", 0.0) > 0 and damage > 0:
+            gained = damage * BLOOD_ESSENCE_GAIN_ON_HIT_RATIO
+            cap_room = max(0.0, self.design_blood_essence_max - self.design_blood_essence)
+            blood_just_gained = min(gained, cap_room)
+            self.design_blood_essence += blood_just_gained
+            if self.design_blood_essence >= self.design_blood_essence_max:
+                self.design_blood_fused = True  # 玄成（永久，之后不再吸蓄）
+        # 2) 攻击形毁注入：
+        #    132 对【玄成】目标：总伤害 80% 按形毁（×1.5、无视防御）并耗等额玄血
+        #    同队队友对 有玄血 目标：附加 10% 基础伤害形毁并耗等额玄血
+        _attacker = source if isinstance(source, Character) else getattr(source, "owner", None) if source is not None else None
+        if not is_true_damage and _attacker is not None and _attacker is not self and damage > 0:
+            if _attacker.job_name == BLOODARTIST_JOB_NAME and getattr(self, "design_blood_fused", False):
+                shatter_part = damage * BLOOD_FUSED_SHATTER_RATIO
+                damage *= 1.0 - BLOOD_FUSED_SHATTER_RATIO
+                shatter_damage = shatter_part * BLOOD_SHATTER_DAMAGE_MULT
+                if shatter_damage > 0:
+                    consumed = min(shatter_damage, self.design_blood_essence)
+                    self.design_blood_essence -= consumed
+                    damage += consumed
+            elif _attacker.owner_id == self.owner_id and getattr(self, "design_blood_essence", 0.0) > 0:
+                ally_shatter = _attacker.get_current_basic_damage() * BLOOD_ALLY_SHATTER_RATIO
+                if ally_shatter > 0:
+                    consumed = min(ally_shatter * BLOOD_SHATTER_DAMAGE_MULT, self.design_blood_essence)
+                    self.design_blood_essence -= consumed
+                    damage += consumed
+        # 3) 玄血护体·形毁（全场）：玄血>0 受击 → 伤害 ×1.5（无视防御减伤），玄血吸收（不扣本次新增）
         blood_shatter_bypass = False
         blood_protected = False
         if getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
             blood_protected = True
             damage *= BLOOD_SHATTER_DAMAGE_MULT
-            absorbed = min(damage, self.design_blood_essence)
+            absorbable = max(0.0, self.design_blood_essence - blood_just_gained)
+            absorbed = min(damage, absorbable)
             self.design_blood_essence -= absorbed
             damage -= absorbed
             if damage > 0:
@@ -2712,6 +2742,7 @@ class Character:
         if self.job_name == "Knight" and self.guard_timer > 0:
             self.knight_recorded_damage += damage
         pre_damage_hp = self.hp
+        actual_damage_taken = damage
         self.damageTaken += damage
         if self.design_corrupted_blood > 0:
             hp_absorb = min(damage, self.hp)
@@ -2891,8 +2922,8 @@ class Character:
                     crit=is_true_damage or damage >= DAMAGE_TEXT_CRIT_THRESHOLD,
                 )
             )
-        if self.hp <= 0 and blood_protected:
-            # 玄血护体：本次受击前玄血>0（伤害已部分吸收）→ HP 归零保命（钳到 1 继续战斗）
+        if self.hp <= 0 and blood_protected and self.job_name == BLOODARTIST_JOB_NAME:
+            # 玄血护体（仅玄血武者）：本次受击前玄血>0（伤害已部分吸收）→ HP 归零保命（钳到 1 继续战斗）
             self.hp = 1.0
             if game_state is not None:
                 spawn_damage_text(game_state, self, 0.0, text="玄血护体", color=BLOOD_ESSENCE_COLOR)
@@ -3069,12 +3100,17 @@ class Character:
                 lost = max(0.0, self.max_hp - self.hp)
                 if lost > 0:
                     self.add_true_shield(lost * BASTION_WALL_SHIELD_RATIO)
-        # 132 玄血武者：造成伤害时蓄等量玄血（攻击者为 132 时）
+        # 132 玄血武者：造成伤害时蓄等量玄血（攻击者为 132 且自身未玄成）
         if damage > 0 and source_character is not None and source_character is not self and source_character.job_name == BLOODARTIST_JOB_NAME:
-            source_character.design_blood_essence = min(
-                getattr(source_character, "design_blood_essence_max", source_character.max_hp),
-                source_character.design_blood_essence + damage,
-            )
+            if not source_character.design_blood_fused:
+                source_character.design_blood_essence = min(
+                    getattr(source_character, "design_blood_essence_max", source_character.max_hp),
+                    source_character.design_blood_essence + damage,
+                )
+                if source_character.design_blood_essence >= source_character.design_blood_essence_max:
+                    source_character.design_blood_fused = True
+                    if game_state is not None:
+                        spawn_damage_text(game_state, source_character, 0.0, text="玄成", color=BLOOD_ESSENCE_COLOR)
         if self.job_name == "DesignRole74_ghost_capt" and not self.design_low_hp_triggered and self.hp > 0 and self.hp <= self.max_hp * 0.3 and game_state is not None:
             self.design_low_hp_triggered = True
             for _ in range(2):
@@ -5307,7 +5343,7 @@ class Character:
 
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, mp_rect, 1, border_radius=2)
-        # 玄血条（132 玄血武者）：血条上方第二生命暗红条
+        # 玄血条（132 玄血武者）：血条上方第二生命暗红条；玄成时金边
         if getattr(self, "design_blood_essence_max", 0.0) > 0:
             blood_rect = pygame.Rect(hp_rect.left, hp_rect.top - 12, hp_rect.width, 4)
             pygame.draw.rect(surface, (28, 24, 32), blood_rect, border_radius=2)
@@ -5316,7 +5352,8 @@ class Character:
                 fill = blood_rect.copy()
                 fill.width = max(1, int(blood_rect.width * blood_ratio))
                 pygame.draw.rect(surface, BLOOD_ESSENCE_COLOR, fill, border_radius=2)
-            pygame.draw.rect(surface, (96, 52, 64), blood_rect, 1, border_radius=2)
+            border_c = (255, 214, 120) if getattr(self, "design_blood_fused", False) else (96, 52, 64)
+            pygame.draw.rect(surface, border_c, blood_rect, 1, border_radius=2)
         # 遮断阵营【遮断条】：金色，位于血条 0 位置（左端起向右爬），比例 = 遮断条层数/当前生命值
         if getattr(self, "design_interrupt_bar", 0.0) > 0:
             interrupt_rect = pygame.Rect(hp_rect.left, mp_rect.bottom + 2, hp_rect.width, 4)
