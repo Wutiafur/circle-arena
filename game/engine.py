@@ -2922,6 +2922,10 @@ def spawn_windstorm_blade_projectile(
             return
         if isinstance(target, Character):
             apply_design_hit_effects(caster, target, hit_game_state, True)
+            # 狂风灵狐：每一发额外造成敌人最大生命 2% 的真实伤害
+            true_bonus = getattr(target, "max_hp", 0.0) * WINDSTORM_FOX_MAXHP_TRUE_RATIO
+            if true_bonus > 0:
+                target.take_damage(true_bonus, source=caster, damage_type="true_windstorm_fox_maxhp", game_state=hit_game_state)
             if apply_resist:
                 caster.apply_windstorm_physical_resistance()
             if lifesteal_ratio > 0:
