@@ -563,6 +563,9 @@ class Character:
             return SUNFIRE_FIRE_COLOR if self.sunfire_fire_timer > 0 else SUNFIRE_WATER_COLOR
         if self.is_soul_moth() and self.design_soul_moth_form:
             return SOUL_MOTH_FORM_COLOR
+        # 勇者 10 级（满级）：外观变为金色
+        if self.job_name == HERO_JOB_NAME and getattr(self, "design_hero_level10", False):
+            return HERO_LEVEL10_COLOR
         return self.color
 
     def add_design_xp(self, amount):
