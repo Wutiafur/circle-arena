@@ -3138,6 +3138,9 @@ class Character:
             stacks = self.soul_arbiter_soul_stacks
             heal_ratio = SOUL_ARBITER_SOUL_BASE_HEAL_RATIO + SOUL_ARBITER_SOUL_PER_STACK_RATIO * stacks
             self.heal(self.max_hp * heal_ratio)
+        # 98 勇者·挨打升级：每次受到伤害获得 5 经验
+        if damage > 0 and self.job_name == HERO_JOB_NAME:
+            self.add_design_xp(5.0)
         if self.job_name == "DesignRole74_ghost_capt" and not self.design_low_hp_triggered and self.hp > 0 and self.hp <= self.max_hp * 0.3 and game_state is not None:
             self.design_low_hp_triggered = True
             for _ in range(2):
