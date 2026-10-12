@@ -4337,7 +4337,7 @@ def cast_design_skill(caster, game_state, token=None):
             caster.heal(20.0)
     elif token == "mortar_barrage":
         caster.apply_root(3.0)
-        total_shells = 15
+        total_shells = GRENADIER_MORTAR_TOTAL
         for index in range(total_shells):
             aim = select_nearest_enemy(caster, game_state["characters"])
             if aim is not None and aim.alive:
