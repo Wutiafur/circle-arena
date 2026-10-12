@@ -2202,8 +2202,8 @@ class Character:
             return 0.0
         if self.is_vampire():
             amount *= 1.0 + self.get_vampire_blood_stacks() * 0.05
-        # 玄血吞治疗：玄血>0 时回血量先补充玄血缺口（HP 不涨）；玄成后不再吸蓄
-        if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0 and not getattr(self, "design_blood_fused", False):
+        # 玄血吞回血：有玄血时回血量优先补玄血（HP 不涨），"优先扣除"落位
+        if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0:
             capacity = max(0.0, getattr(self, "design_blood_essence_max", self.max_hp) - self.design_blood_essence)
             if capacity > 0:
                 fill = min(amount, capacity)
@@ -2458,16 +2458,17 @@ class Character:
                     consumed = min(ally_shatter * BLOOD_SHATTER_DAMAGE_MULT, self.design_blood_essence)
                     self.design_blood_essence -= consumed
                     damage += consumed
-        # 3) 玄血护体·形毁：玄血>0 受击 → 伤害 ×1.5（无视防御减伤），玄血吸收（不扣本次新增）
+        # 3) 玄血双池扣血：玄血>0 时伤害 ×1.5（形毁·无视防御减伤），HP 与玄血各承担 50%
+        #    （玄血不足部分由 HP 掏）；玄血耗尽后恢复正常 ×1.0 只扣 HP
         blood_shatter_bypass = False
         blood_protected = False
         if blood_active and getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
             blood_protected = True
-            damage *= BLOOD_SHATTER_DAMAGE_MULT
-            absorbable = max(0.0, self.design_blood_essence - blood_just_gained)
-            absorbed = min(damage, absorbable)
-            self.design_blood_essence -= absorbed
-            damage -= absorbed
+            total = damage * BLOOD_SHATTER_DAMAGE_MULT
+            blood_half = total * 0.5
+            blood_paid = min(blood_half, max(0.0, self.design_blood_essence))
+            self.design_blood_essence -= blood_paid
+            damage = total - blood_paid  # 剩余（50% + 玄血不足补偿）由 HP 承担
             if damage > 0:
                 blood_shatter_bypass = True
         if getattr(self, "envy_fortress", False) and damage > 0:
