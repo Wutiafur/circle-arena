@@ -467,6 +467,10 @@ SOUL_ARBITER_HUNT_SPEED_BONUS = 0.30
 SOUL_ARBITER_HUNT_CHAIN_LIMIT = 3
 SOUL_ARBITER_SPIRIT_LIFETIME = 10.0
 SOUL_ARBITER_SPIRIT_SCALE = 0.30
+# 拘魂回响：击杀+1层、受击回血 = (0.02% + 0.1×层数) × 最大生命
+SOUL_ARBITER_SOUL_BASE_HEAL_RATIO = 0.0002
+SOUL_ARBITER_SOUL_PER_STACK_RATIO = 0.1
+SOUL_ARBITER_SOUL_STACK_CAP = 20
 SUNFIRE_JOB_NAME = "DesignRole94_sunfire_blademaster"
 SUNFIRE_WATER_COLOR = (96, 212, 255)
 SUNFIRE_FIRE_COLOR = (214, 62, 58)
@@ -2816,7 +2820,7 @@ JOB_DEFS[SOUL_ARBITER_JOB_NAME] = {
     "mp_mode": "damage_dealt_scaled",
     "mp_rate": 0.5,
     "attack_type": "melee",
-    "attack_damage": 10.0,
+    "attack_damage": 20.0,
     "attack_range": 72.0,
     "attack_interval": 0.56,
     "projectile_speed": 285.0,

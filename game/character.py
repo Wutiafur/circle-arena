@@ -483,6 +483,8 @@ class Character:
             self.hp = self.max_hp
             self.mp = 0.0
             self.color = tuple(clamp(channel + 25, 0, 255) for channel in self.color)
+        # 92 镇灵判官：拘魂层数
+        self.soul_arbiter_soul_stacks = 0
         if self.job_name == PHOENIX_JOB_NAME:
             self.design_phoenix_feather = PHOENIX_FEATHER_INITIAL
         if self.job_name == XUANWU_JOB_NAME:
@@ -1033,9 +1035,13 @@ class Character:
         return SOUL_ARBITER_HUNT_CHAIN_LIMIT if self.soul_arbiter_hunt_timer > 0 else 1
 
     def register_soul_arbiter_kill(self, fallen, game_state):
-        if self.job_name != SOUL_ARBITER_JOB_NAME or self.soul_arbiter_hunt_timer <= 0:
+        if self.job_name != SOUL_ARBITER_JOB_NAME:
             return
         if not isinstance(fallen, Character) or not getattr(fallen, "is_main_character", True) or fallen.owner_id == self.owner_id:
+            return
+        # 拘魂回响：击杀任意敌人 +1 层【拘魂】（封顶）
+        self.soul_arbiter_soul_stacks = min(SOUL_ARBITER_SOUL_STACK_CAP, self.soul_arbiter_soul_stacks + 1)
+        if self.soul_arbiter_hunt_timer <= 0:
             return
         self.max_hp += 10.0
         if game_state is not None:
@@ -3120,6 +3126,11 @@ class Character:
                     source_character.design_blood_fused = True
                     if game_state is not None:
                         spawn_damage_text(game_state, source_character, 0.0, text="玄成", color=BLOOD_ESSENCE_COLOR)
+        # 92 镇灵判官·拘魂回响：每次受到伤害回复 (0.02% + 0.1×层数) 最大生命
+        if damage > 0 and self.job_name == SOUL_ARBITER_JOB_NAME:
+            stacks = self.soul_arbiter_soul_stacks
+            heal_ratio = SOUL_ARBITER_SOUL_BASE_HEAL_RATIO + SOUL_ARBITER_SOUL_PER_STACK_RATIO * stacks
+            self.heal(self.max_hp * heal_ratio)
         if self.job_name == "DesignRole74_ghost_capt" and not self.design_low_hp_triggered and self.hp > 0 and self.hp <= self.max_hp * 0.3 and game_state is not None:
             self.design_low_hp_triggered = True
             for _ in range(2):
