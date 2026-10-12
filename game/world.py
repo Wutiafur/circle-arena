@@ -59,6 +59,9 @@ def draw_ui(surface, title_font, small_font, game_state):
 
 
 def create_game_state(player_count, timed_weapon_orb_drops_enabled=True):
+    # 每场开局重置玄血条登场记忆
+    Character._blood_visual_seen = False
+    Character._blood_visual_enabled = False
     characters = spawn_characters(player_count, ARENA_RECT)
     initial_orb = spawn_weapon_orb(ARENA_RECT, characters, []) if timed_weapon_orb_drops_enabled else None
     weapon_orbs = [initial_orb] if initial_orb is not None else []
@@ -356,10 +359,10 @@ def apply_interrupt_ticks(game_state, dt):
     - 每 3 秒：遮断条 += 当前强度 × 1；遮断层数 -1（归零 → 状态消散，条保留）
     - 遮断条 ≥ 目标当前生命值 → 爆发：条消失、眩晕 5 秒、期间物抗/法抗 = 2.5（5 秒后恢复）
     """
-    # 玄血条视觉开关：仅玄血武者(132)存活时显示全体玄血条
-    Character._blood_visual_enabled = any(
-        c.alive and getattr(c, "job_name", None) == BLOODARTIST_JOB_NAME for c in game_state["characters"]
-    )
+    # 玄血条视觉开关：玄血武者(132)登场过即永久显示（阵亡后保留）；未登场才隐藏
+    if any(getattr(c, "job_name", None) == BLOODARTIST_JOB_NAME and c.alive for c in game_state["characters"]):
+        Character._blood_visual_seen = True
+    Character._blood_visual_enabled = Character._blood_visual_seen
     # 判定场上是否存在触发的遮断阵营（任一 owner 的遮断角色 ≥2）
     interrupt_active_global = False
     faction_counts = {}

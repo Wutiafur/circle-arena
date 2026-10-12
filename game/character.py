@@ -14,7 +14,8 @@ from game.utils import *
 from game.drawing import *
 
 class Character:
-    # 玄血条视觉开关：仅玄血武者(132)在场时显示全场角色的玄血条
+    # 玄血条视觉开关：玄血武者(132)本场登场过即永久显示全体玄血条（阵亡后保留）
+    _blood_visual_seen = False
     _blood_visual_enabled = False
 
     def __init__(self, job_name, character_id, pos, owner_id=None, is_main_character=True, clone_config=None):
