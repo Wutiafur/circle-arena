@@ -190,6 +190,45 @@ def draw_shape_icon(surface, shape, color, center, radius, outline=True):
     elif shape == "ring":
         pygame.draw.circle(surface, color, center, round(radius))
         pygame.draw.circle(surface, BACKGROUND_COLOR, center, round(radius * 0.56))
+    elif shape == "hammer":
+        # 钉锤形：圆锤头 + 短柄（随朝向旋转由 draw_shape 处理）
+        pygame.draw.circle(surface, color, (center[0] - int(radius * 0.22), center[1]), round(radius * 0.82))
+        handle = pygame.Rect(0, 0, radius * 0.34, radius * 1.5)
+        handle.center = (center[0] + int(radius * 0.52), center[1])
+        pygame.draw.rect(surface, tuple(max(50, int(channel * 0.8)) for channel in color), handle, border_radius=3)
+        pygame.draw.line(surface, tuple(min(255, int(channel + 42)) for channel in color), (center[0] - int(radius * 0.6), center[1]), (center[0] + int(radius * 0.15), center[1]), max(2, int(radius * 0.18)))
+    elif shape == "slab":
+        # 方砖形：菱形砖块 + 十字砖缝
+        points = [
+            (center[0], center[1] - radius),
+            (center[0] + radius, center[1]),
+            (center[0], center[1] + radius),
+            (center[0] - radius, center[1]),
+        ]
+        pygame.draw.polygon(surface, color, points)
+        mortar = tuple(min(255, int(channel + 50)) for channel in color)
+        pygame.draw.line(surface, mortar, (center[0] - int(radius * 0.55), center[1]), (center[0] + int(radius * 0.55), center[1]), max(2, int(radius * 0.2)))
+        pygame.draw.line(surface, mortar, (center[0], center[1] - int(radius * 0.55)), (center[0], center[1] + int(radius * 0.55)), max(2, int(radius * 0.2)))
+    elif shape == "bulwark":
+        # 重盾形：椭圆大盾 + 盾面中线 + 顶部铆钉
+        shield_rect = pygame.Rect(0, 0, radius * 1.75, radius * 2.2)
+        shield_rect.center = center
+        pygame.draw.ellipse(surface, color, shield_rect)
+        pygame.draw.line(surface, tuple(min(255, int(channel + 40)) for channel in color), (center[0], shield_rect.top + 4), (center[0], shield_rect.bottom - 6), max(2, int(radius * 0.16)))
+        rivet_y = shield_rect.top + int(radius * 0.35)
+        pygame.draw.circle(surface, (255, 214, 120), (center[0] - int(radius * 0.4), rivet_y), max(2, int(radius * 0.14)))
+        pygame.draw.circle(surface, (255, 214, 120), (center[0] + int(radius * 0.4), rivet_y), max(2, int(radius * 0.14)))
+    elif shape == "long_blade":
+        # 长剑形：细长剑刃 + 中脊线（随朝向旋转）
+        blade = [
+            (center[0], center[1] - radius * 1.35),
+            (center[0] + radius * 0.5, center[1] + radius * 0.35),
+            (center[0] + radius * 0.28, center[1] + radius * 0.7),
+            (center[0] - radius * 0.28, center[1] + radius * 0.7),
+            (center[0] - radius * 0.5, center[1] + radius * 0.35),
+        ]
+        pygame.draw.polygon(surface, color, blade)
+        pygame.draw.line(surface, tuple(min(255, int(channel + 46)) for channel in color), (center[0], center[1] - radius * 1.15), (center[0], center[1] + radius * 0.5), max(1, int(radius * 0.14)))
     else:
         pygame.draw.polygon(surface, color, regular_polygon_points(center, radius, 8, math.pi / 8))
     if outline:
