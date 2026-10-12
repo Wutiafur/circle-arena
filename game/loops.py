@@ -732,6 +732,7 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
     def team_alive(owner_id):
         return [c for c in gs["characters"] if c.alive and c.owner_id == owner_id]
 
+    duel_speed = 1.0
     while True:
         dt = clock.tick(FPS) / 1000.0
         mouse_pos = pygame.mouse.get_pos()
@@ -763,23 +764,30 @@ def _run_duel(screen, clock, title_font, subtitle_font, body_font, button_font, 
                 result_text = f"红队获胜！（剩 {len(red_alive)} 人）"
                 result_color = RED_COLOR
             else:
-                gs["elapsed_time"] += dt
-                for character in gs["characters"]:
-                    character.update(dt, gs)
-                for index, character in enumerate(gs["characters"]):
-                    for other in gs["characters"][index + 1 :]:
-                        character.resolve_overlap(other)
-                # 遮断阵营结算（与 battle_loop 同款）
-                apply_interrupt_ticks(gs, dt)
-                # 武器拾取（与 battle_loop 同款）：擂台赛也能拾取插地的冷锋枪等实体武器
-                for orb in gs["weapon_orbs"]:
-                    if not orb.alive:
-                        continue
+                # 场上只剩两人 → 3 倍速加速决胜
+                living_count = len(red_alive) + len(blue_alive)
+                duel_speed = 3.0 if living_count <= 2 else 1.0
+                steps = max(1, int(duel_speed))
+                sim_dt = dt * duel_speed / steps
+                for _ in range(steps):
+                    gs["elapsed_time"] += sim_dt
                     for character in gs["characters"]:
-                        if character.alive and character.try_pickup_weapon(orb):
-                            break
-                update_world_lists(gs, dt)
+                        character.update(sim_dt, gs)
+                    for index, character in enumerate(gs["characters"]):
+                        for other in gs["characters"][index + 1 :]:
+                            character.resolve_overlap(other)
+                    # 遮断阵营结算（与 battle_loop 同款）
+                    apply_interrupt_ticks(gs, sim_dt)
+                    # 武器拾取（与 battle_loop 同款）：擂台赛也能拾取插地的冷锋枪等实体武器
+                    for orb in gs["weapon_orbs"]:
+                        if not orb.alive:
+                            continue
+                        for character in gs["characters"]:
+                            if character.alive and character.try_pickup_weapon(orb):
+                                break
+                    update_world_lists(gs, sim_dt)
                 gs["characters"] = [c for c in gs["characters"] if c.alive]
+                runtime._LIVE_SPEED_MULTIPLIER = duel_speed
 
         draw_grid(scene_surface)
         draw_ui(scene_surface, title_font, body_font, gs)
