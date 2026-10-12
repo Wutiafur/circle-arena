@@ -14,6 +14,9 @@ from game.utils import *
 from game.drawing import *
 
 class Character:
+    # 玄血条视觉开关：仅玄血武者(132)在场时显示全场角色的玄血条
+    _blood_visual_enabled = False
+
     def __init__(self, job_name, character_id, pos, owner_id=None, is_main_character=True, clone_config=None):
         config = JOB_DEFS[job_name]
         resistance_profile = JOB_RESISTANCE_PROFILES.get(job_name, {})
@@ -5349,8 +5352,8 @@ class Character:
 
         pygame.draw.rect(surface, BORDER_COLOR, hp_rect, 1, border_radius=2)
         pygame.draw.rect(surface, BORDER_COLOR, mp_rect, 1, border_radius=2)
-        # 玄血条（132 玄血武者）：血条上方第二生命暗红条；玄成时金边
-        if getattr(self, "design_blood_essence_max", 0.0) > 0:
+        # 玄血条（仅玄血武者在场时显示）：血条上方第二生命暗红条；玄成时金边
+        if Character._blood_visual_enabled and getattr(self, "design_blood_essence_max", 0.0) > 0:
             blood_rect = pygame.Rect(hp_rect.left, hp_rect.top - 12, hp_rect.width, 4)
             pygame.draw.rect(surface, (28, 24, 32), blood_rect, border_radius=2)
             blood_ratio = clamp(self.design_blood_essence / max(1.0, self.design_blood_essence_max), 0.0, 1.0)

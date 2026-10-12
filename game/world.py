@@ -356,6 +356,10 @@ def apply_interrupt_ticks(game_state, dt):
     - 每 3 秒：遮断条 += 当前强度 × 1；遮断层数 -1（归零 → 状态消散，条保留）
     - 遮断条 ≥ 目标当前生命值 → 爆发：条消失、眩晕 5 秒、期间物抗/法抗 = 2.5（5 秒后恢复）
     """
+    # 玄血条视觉开关：仅玄血武者(132)存活时显示全体玄血条
+    Character._blood_visual_enabled = any(
+        c.alive and getattr(c, "job_name", None) == BLOODARTIST_JOB_NAME for c in game_state["characters"]
+    )
     # 判定场上是否存在触发的遮断阵营（任一 owner 的遮断角色 ≥2）
     interrupt_active_global = False
     faction_counts = {}
