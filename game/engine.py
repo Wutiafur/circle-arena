@@ -3406,10 +3406,16 @@ def fire_design_basic_attack(attacker, target, game_state):
             direction = random_unit_vector()
         direction = direction.normalize()
         game_state["melee_effects"].append(MeleeSwingEffect(attacker.pos + direction * (attacker.radius + 2), attacker.pos + direction * (attacker.get_current_attack_range() + 10)))
-        for _ in range(repeats):
+        # 勇者满级(10级)：普攻双连击
+        hero_twice = role_num == 98 and getattr(attacker, "design_hero_level10", False)
+        hit_steps = range(2) if hero_twice else range(repeats)
+        for _ in hit_steps:
             dealt = target.take_damage(damage, source=attacker, damage_type=attacker.get_design_damage_type("basic_melee"), game_state=game_state)
             if dealt > 0:
                 apply_design_hit_effects(attacker, target, game_state, True)
+                # 勇者满级：每次命中额外造成 50% 普攻伤害的真实伤害
+                if hero_twice:
+                    target.take_damage(damage * HERO_LEVEL10_TRUE_DAMAGE_RATIO, source=attacker, damage_type="true_hero_level10", game_state=game_state)
                 if role_num == 63 and target.hp > 0 and target.hp <= target.max_hp * 0.15:
                     target.take_damage(target.hp + 1.0, source=attacker, damage_type="true_design_execute", game_state=game_state)
                     attacker.design_execute_buff_timer = 5.0

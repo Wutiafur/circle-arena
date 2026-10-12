@@ -485,6 +485,8 @@ class Character:
             self.color = tuple(clamp(channel + 25, 0, 255) for channel in self.color)
         # 92 镇灵判官：拘魂层数
         self.soul_arbiter_soul_stacks = 0
+        # 98 勇者：满级(10级)奖励状态
+        self.design_hero_level10 = False
         if self.job_name == PHOENIX_JOB_NAME:
             self.design_phoenix_feather = PHOENIX_FEATHER_INITIAL
         if self.job_name == XUANWU_JOB_NAME:
@@ -580,6 +582,11 @@ class Character:
             self.design_level_fx_timer = 0.7
             self.design_level_fx_scale = 1.18
             self.update_rect()
+            # 勇者满级(10级)：一次性 +1000 最大生命、回 30% 最大生命、普攻双连+50%真伤（永久）
+            if self.design_level == 10 and self.job_name == HERO_JOB_NAME and not self.design_hero_level10:
+                self.design_hero_level10 = True
+                self.max_hp += HERO_LEVEL10_MAXHP_BONUS
+                self.hp = min(self.max_hp, self.hp + self.max_hp * HERO_LEVEL10_HEAL_RATIO)
 
     def apply_windstorm_physical_resistance(self, amount=WINDSTORM_FOX_PHYS_RESIST_BONUS, duration=WINDSTORM_FOX_PHYS_RESIST_DURATION):
         if not self.is_windstorm_fox() or amount <= 0:
