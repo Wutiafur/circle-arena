@@ -2419,10 +2419,16 @@ class Character:
 
         damage = amount
         is_true_damage = str(damage_type).startswith("true_")
-        # --- 玄血机制（主人定稿）---
+        # --- 玄血机制（主人定稿）：仅当场上存在玄血武者（132）时才激活 ---
+        blood_active = False
+        if game_state is not None:
+            for _c in game_state.get("characters", []):
+                if _c.alive and getattr(_c, "job_name", None) == BLOODARTIST_JOB_NAME:
+                    blood_active = True
+                    break
         # 1) 蓄玄血：任意角色受击结算前，将本次伤害的 50% 存入自身玄血（未玄成、未满时）
         blood_just_gained = 0.0
-        if not getattr(self, "design_blood_fused", False) and getattr(self, "design_blood_essence_max", 0.0) > 0 and damage > 0:
+        if blood_active and not getattr(self, "design_blood_fused", False) and getattr(self, "design_blood_essence_max", 0.0) > 0 and damage > 0:
             gained = damage * BLOOD_ESSENCE_GAIN_ON_HIT_RATIO
             cap_room = max(0.0, self.design_blood_essence_max - self.design_blood_essence)
             blood_just_gained = min(gained, cap_room)
@@ -2433,7 +2439,7 @@ class Character:
         #    132 对【玄成】目标：总伤害 80% 按形毁（×1.5、无视防御）并耗等额玄血
         #    同队队友对 有玄血 目标：附加 10% 基础伤害形毁并耗等额玄血
         _attacker = source if isinstance(source, Character) else getattr(source, "owner", None) if source is not None else None
-        if not is_true_damage and _attacker is not None and _attacker is not self and damage > 0:
+        if blood_active and not is_true_damage and _attacker is not None and _attacker is not self and damage > 0:
             if _attacker.job_name == BLOODARTIST_JOB_NAME and getattr(self, "design_blood_fused", False):
                 shatter_part = damage * BLOOD_FUSED_SHATTER_RATIO
                 damage *= 1.0 - BLOOD_FUSED_SHATTER_RATIO
@@ -2448,10 +2454,10 @@ class Character:
                     consumed = min(ally_shatter * BLOOD_SHATTER_DAMAGE_MULT, self.design_blood_essence)
                     self.design_blood_essence -= consumed
                     damage += consumed
-        # 3) 玄血护体·形毁（全场）：玄血>0 受击 → 伤害 ×1.5（无视防御减伤），玄血吸收（不扣本次新增）
+        # 3) 玄血护体·形毁：玄血>0 受击 → 伤害 ×1.5（无视防御减伤），玄血吸收（不扣本次新增）
         blood_shatter_bypass = False
         blood_protected = False
-        if getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
+        if blood_active and getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
             blood_protected = True
             damage *= BLOOD_SHATTER_DAMAGE_MULT
             absorbable = max(0.0, self.design_blood_essence - blood_just_gained)
