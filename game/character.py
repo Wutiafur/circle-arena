@@ -2202,13 +2202,11 @@ class Character:
             return 0.0
         if self.is_vampire():
             amount *= 1.0 + self.get_vampire_blood_stacks() * 0.05
-        # 玄血吞回血：有玄血时回血量优先补玄血（HP 不涨），"优先扣除"落位
+        # 玄血等额扣除：目标受到回复时，回复量先等额清洗玄血（玄血-回复量），剩余部分才回 HP
         if getattr(self, "design_blood_essence", 0.0) > 0 and amount > 0:
-            capacity = max(0.0, getattr(self, "design_blood_essence_max", self.max_hp) - self.design_blood_essence)
-            if capacity > 0:
-                fill = min(amount, capacity)
-                self.design_blood_essence += fill
-                amount -= fill
+            drain = min(amount, self.design_blood_essence)
+            self.design_blood_essence -= drain
+            amount -= drain
         previous = self.hp
         self.hp = min(self.max_hp, self.hp + amount)
         healed = self.hp - previous
