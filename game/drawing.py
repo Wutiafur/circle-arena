@@ -229,6 +229,66 @@ def draw_shape_icon(surface, shape, color, center, radius, outline=True):
         ]
         pygame.draw.polygon(surface, color, blade)
         pygame.draw.line(surface, tuple(min(255, int(channel + 46)) for channel in color), (center[0], center[1] - radius * 1.15), (center[0], center[1] + radius * 0.5), max(1, int(radius * 0.14)))
+    elif shape == "squad_flag":
+        # 指挥旗形：旗杆 + 上方指挥三角旗 + 底端旗穗
+        pole = pygame.Rect(0, 0, radius * 0.18, radius * 2.1)
+        pole.center = (center[0], center[1])
+        pygame.draw.rect(surface, tuple(min(255, int(channel + 40)) for channel in color), pole, border_radius=2)
+        flag = [
+            (center[0] + radius * 0.1, center[1] - radius * 0.95),
+            (center[0] + radius * 1.05, center[1] - radius * 0.62),
+            (center[0] + radius * 0.1, center[1] - radius * 0.28),
+        ]
+        pygame.draw.polygon(surface, color, flag)
+        pygame.draw.line(surface, (255, 230, 160), (center[0], center[1] - radius * 0.95), (center[0], center[1] + radius * 1.05), max(2, int(radius * 0.16)))
+    elif shape == "sparrow_feather":
+        # 雀羽形：两片斜羽 + 中心羽轴点
+        feather_a = [
+            (center[0] - radius * 0.1, center[1] - radius),
+            (center[0] + radius * 0.95, center[1] - radius * 0.18),
+            (center[0] + radius * 0.1, center[1] + radius * 0.62),
+        ]
+        feather_b = [
+            (center[0] + radius * 0.1, center[1] - radius * 0.62),
+            (center[0] + radius * 0.98, center[1] + radius * 0.18),
+            (center[0] - radius * 0.1, center[1] + radius),
+        ]
+        pygame.draw.polygon(surface, color, feather_a)
+        pygame.draw.polygon(surface, color, feather_b)
+        pygame.draw.circle(surface, tuple(min(255, int(channel + 24)) for channel in color), center, max(2, int(radius * 0.22)))
+    elif shape == "raikiri_blade":
+        # 雷刃形：锯齿闪电刃条 + 亮蓝电芯线
+        blade = [
+            (center[0], center[1] - radius * 1.2),
+            (center[0] + radius * 0.5, center[1] - radius * 0.55),
+            (center[0] + radius * 0.12, center[1] - radius * 0.5),
+            (center[0] + radius * 0.75, center[1] + radius * 0.15),
+            (center[0] + radius * 0.05, center[1] + radius * 0.2),
+            (center[0] + radius * 0.6, center[1] + radius * 0.85),
+            (center[0] - radius * 0.45, center[1] + radius * 0.1),
+            (center[0] - radius * 0.15, center[1] + radius * 0.15),
+            (center[0] - radius * 0.6, center[1] - radius * 0.6),
+            (center[0] - radius * 0.05, center[1] - radius * 0.55),
+        ]
+        pygame.draw.polygon(surface, color, blade)
+        pygame.draw.line(surface, (235, 250, 255), (center[0], center[1] - radius * 0.9), (center[0] - radius * 0.05, center[1] + radius * 0.5), max(1, int(radius * 0.15)))
+    elif shape == "shiro_fox":
+        # 狐尾燕尾形：分叉狐尾 + 顶部两片狐耳
+        tail = [
+            (center[0], center[1] + radius * 0.7),
+            (center[0] + radius * 0.85, center[1] + radius * 0.8),
+            (center[0] + radius * 0.55, center[1] + radius * 0.1),
+            (center[0] + radius * 0.95, center[1] - radius * 0.65),
+            (center[0] + radius * 0.2, center[1] - radius * 0.3),
+            (center[0], center[1] - radius * 0.95),
+            (center[0] - radius * 0.2, center[1] - radius * 0.3),
+            (center[0] - radius * 0.95, center[1] - radius * 0.65),
+            (center[0] - radius * 0.55, center[1] + radius * 0.1),
+            (center[0] - radius * 0.85, center[1] + radius * 0.8),
+        ]
+        pygame.draw.polygon(surface, color, tail)
+        pygame.draw.circle(surface, (150, 168, 210), (center[0] - int(radius * 0.42), center[1] - int(radius * 0.4)), max(1, int(radius * 0.16)))
+        pygame.draw.circle(surface, (150, 168, 210), (center[0] + int(radius * 0.42), center[1] - int(radius * 0.4)), max(1, int(radius * 0.16)))
     else:
         pygame.draw.polygon(surface, color, regular_polygon_points(center, radius, 8, math.pi / 8))
     if outline:

@@ -4966,5 +4966,5 @@ class Decoy(_TargetableProps):
         pygame.draw.polygon(surface, BORDER_COLOR, points, 1)
 
 
-ROTATABLE_SHAPES = {"triangle", "triangle_down", "half_circle", "crescent", "arrow", "chevron", "hammer", "long_blade"}
+ROTATABLE_SHAPES = {"triangle", "triangle_down", "half_circle", "crescent", "arrow", "chevron", "hammer", "long_blade", "squad_flag", "sparrow_feather", "raikiri_blade", "shiro_fox"}
 
