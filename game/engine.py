@@ -1024,7 +1024,7 @@ class Summon(_TargetableProps):
             self.burst_damage = 8.0
             self.burst_radius = 36.0
 
-    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False):
+    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False, ignore_physical_resistance=False):
         if not self.alive:
             return 0.0
         pre_damage_hp = self.hp
@@ -1120,7 +1120,7 @@ class Mine:
         self.alive = True
         self.is_decoy = False
 
-    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False):
+    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False, ignore_physical_resistance=False):
         if not self.alive:
             return 0.0
         pre_damage_hp = self.hp
@@ -1332,7 +1332,7 @@ class Totem(_TargetableProps):
         self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
         self.rect.center = (round(self.pos.x), round(self.pos.y))
 
-    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False):
+    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False, ignore_physical_resistance=False):
         if not self.alive or amount <= 0:
             return 0.0
         pre_damage_hp = self.hp
@@ -1389,7 +1389,7 @@ class Banner(_TargetableProps):
         self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
         self.rect.center = (round(self.pos.x), round(self.pos.y))
 
-    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False):
+    def take_damage(self, amount, source=None, damage_type="basic", game_state=None, ignore_shields=False, ignore_equilibrium_thresholds=False, ignore_physical_resistance=False):
         if not self.alive or amount <= 0:
             return 0.0
         self.hp -= amount
@@ -2617,6 +2617,7 @@ class DesignSummon(_TargetableProps):
         count_on_damage_dealt=True,
         ignore_shields=False,
         ignore_equilibrium_thresholds=False,
+        ignore_physical_resistance=False,
     ):
         if not self.alive or amount <= 0:
             return 0.0
@@ -4940,6 +4941,7 @@ class Decoy(_TargetableProps):
         count_on_damage_dealt=True,
         ignore_shields=False,
         ignore_equilibrium_thresholds=False,
+        ignore_physical_resistance=False,
     ):
         if not self.alive:
             return 0.0
