@@ -228,6 +228,7 @@ def load_settings():
         "effects_quality": "high",
         "skip_entrance": False,
         "fullscreen": False,
+        "disable_timed_weapon_drops": True,  # 关闭定时武器掉落：默认常驻开启
     }
     try:
         with open(_settings_path(), "r", encoding="utf-8") as handle:

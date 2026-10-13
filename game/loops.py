@@ -17,7 +17,8 @@ from game import runtime
 
 def main_menu(screen, clock, title_font, subtitle_font, button_font):
     player_count = MAX_CHARACTERS
-    disable_timed_weapon_drops = False
+    # 关闭定时武器掉落：从设置持久读取（默认常驻开启），切回写回 settings.json
+    disable_timed_weapon_drops = bool(GAME_SETTINGS.get("disable_timed_weapon_drops", True))
 
     while True:
         button_rects = get_menu_button_rects()
@@ -40,6 +41,8 @@ def main_menu(screen, clock, title_font, subtitle_font, button_font):
                     player_count = min(MAX_CHARACTERS, player_count + 1)
                 elif button_rects["weapon_drops"].collidepoint(mapped_pos):
                     disable_timed_weapon_drops = not disable_timed_weapon_drops
+                    GAME_SETTINGS["disable_timed_weapon_drops"] = disable_timed_weapon_drops
+                    save_settings(GAME_SETTINGS)
                 elif button_rects["start"].collidepoint(mapped_pos):
                     return ("battle", player_count, disable_timed_weapon_drops)
                 elif button_rects["pokedex"].collidepoint(mapped_pos):
