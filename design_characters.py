@@ -80,6 +80,9 @@ VISUAL_SHAPE_MAP = {
     "雀羽形": "sparrow_feather",
     "雷刃形": "raikiri_blade",
     "狐尾燕尾形": "shiro_fox",
+    # 122/124 专属形状
+    "灯笼形": "zashiki_lantern",
+    "盾形": "loyal_shield",
 }
 
 COLOR_MAP = {
@@ -144,6 +147,9 @@ COLOR_MAP = {
     "暖雀羽色": (186, 138, 92),
     "蓝白雷光": (96, 176, 255),
     "雪白色": (240, 244, 248),
+    # 122/124 专属配色
+    "幽绿色": (96, 180, 120),
+    "暗紫绿色": (88, 66, 110),
 }
 
 ROLE_CONFIG_OVERRIDES = {

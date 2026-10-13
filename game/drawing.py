@@ -289,6 +289,33 @@ def draw_shape_icon(surface, shape, color, center, radius, outline=True):
         pygame.draw.polygon(surface, color, tail)
         pygame.draw.circle(surface, (150, 168, 210), (center[0] - int(radius * 0.42), center[1] - int(radius * 0.4)), max(1, int(radius * 0.16)))
         pygame.draw.circle(surface, (150, 168, 210), (center[0] + int(radius * 0.42), center[1] - int(radius * 0.4)), max(1, int(radius * 0.16)))
+    elif shape == "zashiki_lantern":
+        # 灯笼形：圆灯笼壳 + 上下灯帽 + 顶挂绳钮 + 底部流苏点
+        shell = pygame.Rect(0, 0, radius * 1.7, radius * 1.7)
+        shell.center = center
+        pygame.draw.ellipse(surface, color, shell)
+        pygame.draw.line(surface, tuple(min(255, int(channel + 45)) for channel in color), (center[0] - int(radius * 0.7), center[1] - int(radius * 0.2)), (center[0] + int(radius * 0.7), center[1] - int(radius * 0.2)), max(1, int(radius * 0.13)))
+        pygame.draw.line(surface, tuple(min(255, int(channel + 45)) for channel in color), (center[0] - int(radius * 0.7), center[1] + int(radius * 0.2)), (center[0] + int(radius * 0.7), center[1] + int(radius * 0.2)), max(1, int(radius * 0.13)))
+        cap_top = pygame.Rect(0, 0, radius * 0.65, radius * 0.3)
+        cap_top.center = (center[0], center[1] - int(radius * 0.92))
+        pygame.draw.rect(surface, tuple(max(40, int(channel * 0.72)) for channel in color), cap_top, border_radius=2)
+        cap_bot = pygame.Rect(0, 0, radius * 0.55, radius * 0.26)
+        cap_bot.center = (center[0], center[1] + int(radius * 0.92))
+        pygame.draw.rect(surface, tuple(max(40, int(channel * 0.72)) for channel in color), cap_bot, border_radius=2)
+        pygame.draw.circle(surface, (255, 244, 200), (center[0], center[1] - int(radius * 1.08)), max(2, int(radius * 0.16)))
+        pygame.draw.circle(surface, (255, 244, 200), (center[0], center[1] + int(radius * 1.08)), max(1, int(radius * 0.1)))
+    elif shape == "loyal_shield":
+        # 方盾形：圆角方盾 + 中央忠印格 + 顶部双铆钉
+        shield = pygame.Rect(0, 0, radius * 1.85, radius * 2.0)
+        shield.center = center
+        pygame.draw.rect(surface, color, shield, border_radius=max(4, int(radius * 0.4)))
+        inner = shield.inflate(-int(radius * 0.75), -int(radius * 0.95))
+        pygame.draw.rect(surface, tuple(min(255, int(channel + 38)) for channel in color), inner, border_radius=3, width=max(2, int(radius * 0.14)))
+        pygame.draw.line(surface, (255, 214, 120), (inner.left + 3, inner.centery), (inner.right - 3, inner.centery), max(1, int(radius * 0.12)))
+        pygame.draw.line(surface, (255, 214, 120), (inner.centerx, inner.top + 3), (inner.centerx, inner.bottom - 3), max(1, int(radius * 0.12)))
+        rivet_y = shield.top + int(radius * 0.22)
+        pygame.draw.circle(surface, (255, 214, 120), (center[0] - int(radius * 0.5), rivet_y), max(2, int(radius * 0.13)))
+        pygame.draw.circle(surface, (255, 214, 120), (center[0] + int(radius * 0.5), rivet_y), max(2, int(radius * 0.13)))
     else:
         pygame.draw.polygon(surface, color, regular_polygon_points(center, radius, 8, math.pi / 8))
     if outline:
