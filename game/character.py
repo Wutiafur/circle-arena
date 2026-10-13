@@ -2455,7 +2455,7 @@ class Character:
                 self.design_blood_fused = True  # 玄成（永久，之后不再吸蓄）
         # 2) 攻击形毁注入：
         #    132 对【玄成】目标：总伤害 80% 按形毁（×1.5、无视防御）并耗等额玄血
-        #    同队队友对 有玄血 目标：附加 10% 基础伤害形毁并耗等额玄血
+        #    同队队友对【玄成】目标：附加 10% 基础伤害形毁并耗等额玄血（未玄成不扣玄血）
         _attacker = source if isinstance(source, Character) else getattr(source, "owner", None) if source is not None else None
         if blood_active and not is_true_damage and _attacker is not None and _attacker is not self and damage > 0:
             if _attacker.job_name == BLOODARTIST_JOB_NAME and getattr(self, "design_blood_fused", False):
@@ -2466,17 +2466,17 @@ class Character:
                     consumed = min(shatter_damage, self.design_blood_essence)
                     self.design_blood_essence -= consumed
                     damage += consumed
-            elif _attacker.owner_id == self.owner_id and getattr(self, "design_blood_essence", 0.0) > 0:
+            elif _attacker.owner_id == self.owner_id and getattr(self, "design_blood_fused", False):
                 ally_shatter = _attacker.get_current_basic_damage() * BLOOD_ALLY_SHATTER_RATIO
                 if ally_shatter > 0:
                     consumed = min(ally_shatter * BLOOD_SHATTER_DAMAGE_MULT, self.design_blood_essence)
                     self.design_blood_essence -= consumed
                     damage += consumed
-        # 3) 玄血双池扣血：玄血>0 时伤害 ×1.5（形毁·无视防御减伤），HP 与玄血各承担 50%
+        # 3) 玄血双池扣血（仅玄成后）：玄血>0 时伤害 ×1.5（形毁·无视防御减伤），HP 与玄血各承担 50%
         #    （玄血不足部分由 HP 掏）；玄血耗尽后恢复正常 ×1.0 只扣 HP
         blood_shatter_bypass = False
         blood_protected = False
-        if blood_active and getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
+        if blood_active and getattr(self, "design_blood_fused", False) and getattr(self, "design_blood_essence", 0.0) > 0 and damage > 0:
             blood_protected = True
             total = damage * BLOOD_SHATTER_DAMAGE_MULT
             blood_half = total * 0.5
