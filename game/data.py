@@ -20,8 +20,8 @@ from design_characters import load_design_roles
 from game.paths import PROJECT_ROOT
 from game import runtime
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 800
+SCREEN_WIDTH = 880
+SCREEN_HEIGHT = 880
 FPS = 60
 GRENADIER_MORTAR_TOTAL = 10
 WINDOW_DEFAULT_WIDTH = SCREEN_WIDTH

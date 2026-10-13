@@ -1177,6 +1177,13 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
         result_summary_close_rect = pygame.Rect(310, 664, 180, 40)
         result_summary_toggle_rect = pygame.Rect(580, 640, 180, 36)
 
+        # 左下侧调速栏：1x / 2x / 3x
+        speed_bar_rects = {
+            "1": pygame.Rect(ARENA_RECT.left + 8, ARENA_RECT.bottom - 40, 44, 28),
+            "2": pygame.Rect(ARENA_RECT.left + 58, ARENA_RECT.bottom - 40, 44, 28),
+            "3": pygame.Rect(ARENA_RECT.left + 108, ARENA_RECT.bottom - 40, 44, 28),
+        }
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return None
@@ -1187,8 +1194,8 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
                     speed_multiplier = 1.0
                 elif event.key in (pygame.K_2, pygame.K_KP2):
                     speed_multiplier = 2.0
-                elif event.key in (pygame.K_3, pygame.K_4, pygame.K_KP3, pygame.K_KP4):
-                    speed_multiplier = 4.0
+                elif event.key in (pygame.K_3, pygame.K_KP3):
+                    speed_multiplier = 3.0
             if event.type == pygame.MOUSEWHEEL and not game_state["winner_text"]:
                 wheel_mouse_x, wheel_mouse_y = pygame.mouse.get_pos()
                 if wheel_mouse_x >= SCREEN_WIDTH:
@@ -1196,23 +1203,29 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
                     max_scroll = max(0, participant_count - SIDEBAR_VISIBLE_ROWS)
                     sidebar_scroll = int(clamp(sidebar_scroll - event.y, 0, max_scroll))
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if result_summary_close_rect.collidepoint(event.pos) and game_state["winner_text"] and show_result_summary:
+                speed_clicked = False
+                for speed_key, speed_value in (("1", 1.0), ("2", 2.0), ("3", 3.0)):
+                    if not game_state["winner_text"] and speed_bar_rects[speed_key].collidepoint(event.pos):
+                        speed_multiplier = speed_value
+                        speed_clicked = True
+                        break
+                if not speed_clicked and result_summary_close_rect.collidepoint(event.pos) and game_state["winner_text"] and show_result_summary:
                     show_result_summary = False
-                elif result_summary_toggle_rect.collidepoint(event.pos) and game_state["winner_text"]:
+                elif not speed_clicked and result_summary_toggle_rect.collidepoint(event.pos) and game_state["winner_text"]:
                     show_result_summary = not show_result_summary
-                elif sidebar_tab_rects["output"].collidepoint(event.pos):
+                elif not speed_clicked and sidebar_tab_rects["output"].collidepoint(event.pos):
                     active_tab = "output"
-                elif sidebar_tab_rects["taken"].collidepoint(event.pos):
+                elif not speed_clicked and sidebar_tab_rects["taken"].collidepoint(event.pos):
                     active_tab = "taken"
-                elif sidebar_tab_rects["kills"].collidepoint(event.pos):
+                elif not speed_clicked and sidebar_tab_rects["kills"].collidepoint(event.pos):
                     active_tab = "kills"
-                elif game_state["winner_text"] and end_button_rect.collidepoint(event.pos):
+                elif not speed_clicked and game_state["winner_text"] and end_button_rect.collidepoint(event.pos):
                     return "menu"
-                elif paused and pause_button_rects["resume"].collidepoint(event.pos):
+                elif not speed_clicked and paused and pause_button_rects["resume"].collidepoint(event.pos):
                     paused = False
-                elif paused and pause_button_rects["menu"].collidepoint(event.pos):
+                elif not speed_clicked and paused and pause_button_rects["menu"].collidepoint(event.pos):
                     return "menu"
-                else:
+                elif not speed_clicked:
                     for row in sidebar_rows:
                         if row["rect"].collidepoint(event.pos):
                             follow_character_id = row["character"].id
@@ -1269,6 +1282,14 @@ def battle_loop(screen, clock, title_font, small_font, button_font, player_count
         draw_ui(scene_surface, title_font, small_font, game_state)
         pygame.draw.rect(scene_surface, BORDER_COLOR, ARENA_RECT, 3)
         draw_world(scene_surface, game_state, small_font)
+        # 左下侧调速栏：1x / 2x / 3x（当前档高亮）
+        if not game_state["winner_text"]:
+            for speed_key, speed_value in (("1", 1.0), ("2", 2.0), ("3", 3.0)):
+                bar_rect = speed_bar_rects[speed_key]
+                active = abs(speed_multiplier - speed_value) < 0.01
+                draw_panel(scene_surface, bar_rect, MENU_ACCENT if active else MENU_BUTTON, border_color=BORDER_COLOR, radius=6, shadow_offset=(1, 1))
+                label = small_font.render(f"{speed_key}x", True, TEXT_COLOR)
+                scene_surface.blit(label, label.get_rect(center=bar_rect.center))
         frame_surface.fill(BACKGROUND_COLOR)
         if not paused and game_state["shake_timer"] > 0:
             shake_strength = game_state["shake_magnitude"] * (game_state["shake_timer"] / SCREEN_SHAKE_DURATION)
