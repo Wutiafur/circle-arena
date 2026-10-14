@@ -36,3 +36,6 @@ numen-mcp.mjs
 
 # 离线仓库快照（git bundle）
 *.bundle
+
+# 会话交接笔记（私人工作记录，不入公开仓库）
+SESSION_CONTEXT.md
