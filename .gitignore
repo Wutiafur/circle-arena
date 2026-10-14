@@ -33,3 +33,6 @@ debug.log
 dsh-restart.log
 dsh-restart.ps1
 numen-mcp.mjs
+
+# 离线仓库快照（git bundle）
+*.bundle
