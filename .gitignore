@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -23,3 +23,13 @@ _scan_out.txt
 # 平衡扫描器运行产物
 _balance_report.json
 _balance_report.txt
+
+# 临时调试产物
+_duel_out.txt
+debug.log
+
+# 本地工具/环境产物（不属于游戏）
+.npm-cache/
+dsh-restart.log
+dsh-restart.ps1
+numen-mcp.mjs

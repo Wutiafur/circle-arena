@@ -1,15 +1,15 @@
 {
   "roles": {
     "Knight": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "Mage": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "Assassin": {
-      "matches": 7,
+      "matches": 8,
       "wins": 0
     },
     "Berserker": {
@@ -17,23 +17,23 @@
       "wins": 0
     },
     "Sniper": {
-      "matches": 5,
+      "matches": 7,
       "wins": 0
     },
     "Necromancer": {
-      "matches": 6,
+      "matches": 7,
       "wins": 0
     },
     "Paladin": {
-      "matches": 0,
+      "matches": 2,
       "wins": 0
     },
     "Ninja": {
-      "matches": 1,
+      "matches": 4,
       "wins": 0
     },
     "Bomber": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Vampire": {
@@ -41,7 +41,7 @@
       "wins": 0
     },
     "Illusionist": {
-      "matches": 4,
+      "matches": 6,
       "wins": 0
     },
     "Behemoth": {
@@ -49,43 +49,43 @@
       "wins": 2
     },
     "Toxicologist": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "Frost Mage": {
-      "matches": 3,
+      "matches": 5,
       "wins": 1
     },
     "Pyro": {
-      "matches": 3,
+      "matches": 6,
       "wins": 0
     },
     "Time Walker": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "Monk": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "Mech Armor": {
-      "matches": 1,
-      "wins": 1
+      "matches": 3,
+      "wins": 2
     },
     "Druid": {
-      "matches": 6,
+      "matches": 7,
       "wins": 0
     },
     "Electro Trooper": {
-      "matches": 6,
+      "matches": 8,
       "wins": 1
     },
     "Puppeteer": {
-      "matches": 1,
+      "matches": 3,
       "wins": 0
     },
     "Smasher": {
-      "matches": 2,
+      "matches": 6,
       "wins": 0
     },
     "Succubus": {
@@ -93,7 +93,7 @@
       "wins": 0
     },
     "Gunslinger": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "Shield Guard": {
@@ -105,31 +105,31 @@
       "wins": 0
     },
     "Windrunner": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "Hexer": {
-      "matches": 4,
+      "matches": 6,
       "wins": 0
     },
     "Chaos Demon": {
-      "matches": 7,
+      "matches": 8,
       "wins": 0
     },
     "Bounty Hunter": {
-      "matches": 2,
-      "wins": 0
-    },
-    "Geomancer": {
       "matches": 4,
       "wins": 0
     },
+    "Geomancer": {
+      "matches": 6,
+      "wins": 0
+    },
     "Bard": {
-      "matches": 5,
+      "matches": 8,
       "wins": 0
     },
     "Shaman": {
-      "matches": 3,
+      "matches": 8,
       "wins": 0
     },
     "Gladiator": {
@@ -137,19 +137,19 @@
       "wins": 0
     },
     "Warlock": {
-      "matches": 4,
-      "wins": 0
-    },
-    "Tinkerer": {
-      "matches": 7,
-      "wins": 0
-    },
-    "Valkyrie": {
       "matches": 5,
       "wins": 0
     },
+    "Tinkerer": {
+      "matches": 8,
+      "wins": 0
+    },
+    "Valkyrie": {
+      "matches": 6,
+      "wins": 1
+    },
     "Dark Knight": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "Psionic": {
@@ -161,27 +161,27 @@
       "wins": 0
     },
     "DesignRole42_lancer": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole43_phantom": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole44_beastmaster": {
-      "matches": 6,
+      "matches": 8,
       "wins": 0
     },
     "DesignRole45_plague_doc": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole46_astromancer": {
-      "matches": 2,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole47_role": {
-      "matches": 2,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole48_corsair": {
@@ -189,7 +189,7 @@
       "wins": 0
     },
     "DesignRole49_cultist": {
-      "matches": 5,
+      "matches": 8,
       "wins": 0
     },
     "DesignRole50_elementalist": {
@@ -201,51 +201,51 @@
       "wins": 0
     },
     "DesignRole52_gravekeeper": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole53_sentinel": {
-      "matches": 7,
+      "matches": 10,
       "wins": 0
     },
     "DesignRole54_jester": {
-      "matches": 1,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole55_role": {
-      "matches": 7,
+      "matches": 8,
       "wins": 2
     },
     "DesignRole56_oracle": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole57_gambler": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole58_voidwalker": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole59_ranger": {
-      "matches": 8,
+      "matches": 10,
       "wins": 0
     },
     "DesignRole60_golem": {
-      "matches": 5,
+      "matches": 6,
       "wins": 4
     },
     "DesignRole61_ronin": {
-      "matches": 3,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole62_lich": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole63_executioner": {
-      "matches": 4,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole64_dreamweaver": {
@@ -253,11 +253,11 @@
       "wins": 0
     },
     "DesignRole65_mechanist": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole66_blood_mage": {
-      "matches": 2,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole67_martial_artist": {
@@ -265,7 +265,7 @@
       "wins": 0
     },
     "DesignRole68_arachnid": {
-      "matches": 6,
+      "matches": 8,
       "wins": 0
     },
     "DesignRole69_ironclad": {
@@ -273,15 +273,15 @@
       "wins": 0
     },
     "DesignRole70_raincaller": {
-      "matches": 4,
+      "matches": 7,
       "wins": 0
     },
     "DesignRole71_spellblade": {
-      "matches": 5,
+      "matches": 9,
       "wins": 0
     },
     "DesignRole72_soul_eater": {
-      "matches": 4,
+      "matches": 5,
       "wins": 1
     },
     "DesignRole73_illuminator": {
@@ -289,7 +289,7 @@
       "wins": 0
     },
     "DesignRole74_ghost_capt": {
-      "matches": 1,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole75_astral_being": {
@@ -297,27 +297,27 @@
       "wins": 0
     },
     "DesignRole76_qi_cultivator": {
-      "matches": 4,
+      "matches": 7,
       "wins": 0
     },
     "DesignRole77_shadow_dancer": {
-      "matches": 5,
+      "matches": 7,
       "wins": 0
     },
     "DesignRole78_hellbringer": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole79_outlaw": {
-      "matches": 4,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole80_chrono_thief": {
-      "matches": 2,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole81_architect": {
-      "matches": 5,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole82_bloodhunter": {
@@ -325,35 +325,35 @@
       "wins": 0
     },
     "DesignRole83_aurora": {
-      "matches": 7,
+      "matches": 10,
       "wins": 0
     },
     "DesignRole84_hive_mind": {
-      "matches": 5,
-      "wins": 0
-    },
-    "DesignRole85_sword_spirit": {
       "matches": 6,
       "wins": 0
     },
+    "DesignRole85_sword_spirit": {
+      "matches": 8,
+      "wins": 0
+    },
     "DesignRole86_soulbinder": {
-      "matches": 3,
+      "matches": 6,
       "wins": 0
     },
     "DesignRole87_frost_giant": {
-      "matches": 1,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole88_powder_keg": {
-      "matches": 5,
+      "matches": 7,
       "wins": 0
     },
     "DesignRole89_acoustician": {
-      "matches": 3,
+      "matches": 4,
       "wins": 0
     },
     "DesignRole90_collector": {
-      "matches": 1,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole93_twin_mirror": {
@@ -361,47 +361,47 @@
       "wins": 2
     },
     "Bloodwraith": {
-      "matches": 4,
+      "matches": 5,
       "wins": 2
     },
     "DesignRole91_phantom_lancer": {
-      "matches": 11,
+      "matches": 12,
       "wins": 0
     },
     "DesignRole92_soul_arbiter": {
-      "matches": 0,
-      "wins": 0
-    },
-    "DesignRole94_sunfire_blademaster": {
-      "matches": 4,
-      "wins": 4
-    },
-    "DesignRole95_windstorm_fox": {
-      "matches": 6,
-      "wins": 0
-    },
-    "DesignRole96_sea_sage": {
-      "matches": 2,
-      "wins": 0
-    },
-    "DesignRole97_equilibrium_arbiter": {
-      "matches": 3,
-      "wins": 0
-    },
-    "DesignRole98_hero": {
       "matches": 1,
       "wins": 0
     },
-    "DesignRole99_phoenix": {
-      "matches": 2,
+    "DesignRole94_sunfire_blademaster": {
+      "matches": 6,
+      "wins": 4
+    },
+    "DesignRole95_windstorm_fox": {
+      "matches": 8,
+      "wins": 1
+    },
+    "DesignRole96_sea_sage": {
+      "matches": 3,
       "wins": 0
+    },
+    "DesignRole97_equilibrium_arbiter": {
+      "matches": 7,
+      "wins": 1
+    },
+    "DesignRole98_hero": {
+      "matches": 3,
+      "wins": 0
+    },
+    "DesignRole99_phoenix": {
+      "matches": 4,
+      "wins": 1
     },
     "DesignRole100_xuanwu": {
-      "matches": 2,
-      "wins": 0
+      "matches": 3,
+      "wins": 1
     },
     "DesignRole101_tiger": {
-      "matches": 3,
+      "matches": 5,
       "wins": 0
     },
     "DesignRole102_azure_dragon": {
@@ -409,7 +409,7 @@
       "wins": 0
     },
     "DesignRole103_susanoo": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole104_ghost_priest": {
@@ -417,35 +417,35 @@
       "wins": 0
     },
     "DesignRole105_flame_dancer": {
-      "matches": 1,
-      "wins": 0
-    },
-    "DesignRole106_abyssal_watcher": {
-      "matches": 1,
-      "wins": 0
-    },
-    "DesignRole107_mind_thief": {
-      "matches": 1,
-      "wins": 0
-    },
-    "DesignRole108_riftbreaker": {
       "matches": 2,
       "wins": 0
     },
-    "DesignRole109_soulbound_casket": {
-      "matches": 1,
+    "DesignRole106_abyssal_watcher": {
+      "matches": 3,
+      "wins": 1
+    },
+    "DesignRole107_mind_thief": {
+      "matches": 3,
       "wins": 0
     },
+    "DesignRole108_riftbreaker": {
+      "matches": 3,
+      "wins": 0
+    },
+    "DesignRole109_soulbound_casket": {
+      "matches": 4,
+      "wins": 1
+    },
     "DesignRole110_soul_moth": {
-      "matches": 1,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole111_railhog": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole112_bannerbearer": {
-      "matches": 1,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole113_soul_alchemist": {
@@ -453,19 +453,19 @@
       "wins": 0
     },
     "DesignRole114_squad_commander": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole115_void_banisher": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole116_sparrowhost": {
-      "matches": 1,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole117_raikiri_blademaster": {
-      "matches": 0,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole118_tide_sprite": {
@@ -473,11 +473,11 @@
       "wins": 0
     },
     "DesignRole119_bloodsucker": {
-      "matches": 0,
+      "matches": 1,
       "wins": 0
     },
     "DesignRole120_shiro_kenshi": {
-      "matches": 0,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole121_thunderblade": {
@@ -485,7 +485,7 @@
       "wins": 0
     },
     "DesignRole122_zashiki": {
-      "matches": 0,
+      "matches": 2,
       "wins": 0
     },
     "DesignRole123_envy_priest": {
@@ -493,7 +493,7 @@
       "wins": 0
     },
     "DesignRole124_loyalguard": {
-      "matches": 0,
+      "matches": 3,
       "wins": 0
     },
     "DesignRole125_grudge_blade": {
@@ -501,6 +501,30 @@
       "wins": 0
     },
     "DesignRole126_envy_prelate": {
+      "matches": 2,
+      "wins": 1
+    },
+    "DesignRole127_chargemaster": {
+      "matches": 1,
+      "wins": 0
+    },
+    "DesignRole128_lightweaver": {
+      "matches": 2,
+      "wins": 0
+    },
+    "DesignRole129_hammerman": {
+      "matches": 1,
+      "wins": 1
+    },
+    "DesignRole130_builder": {
+      "matches": 0,
+      "wins": 0
+    },
+    "DesignRole131_bastion": {
+      "matches": 1,
+      "wins": 0
+    },
+    "DesignRole132_blood_artist": {
       "matches": 1,
       "wins": 0
     }
